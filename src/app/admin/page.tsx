@@ -2041,6 +2041,47 @@ const VideoSourceConfig = ({
     from: 'config',
   });
 
+  // 新增：编辑弹窗相关状态
+  const [editingSource, setEditingSource] = useState<DataSource | null>(null);
+
+  // 新增：删除确认弹窗相关状态
+  const [deletingSource, setDeletingSource] = useState<DataSource | null>(null);
+
+  // 编辑视频源
+  const handleEditSource = (source: DataSource) => {
+    setEditingSource({ ...source });
+  };
+
+  // 保存编辑
+  const handleSaveEditSource = async () => {
+    if (!editingSource) return;
+    await withLoading(`editSource_${editingSource.key}`, async () => {
+      await callSourceApi({
+        action: 'edit',
+        key: editingSource.key,
+        name: editingSource.name,
+        api: editingSource.api,
+        detail: editingSource.detail,
+        disabled: editingSource.disabled,
+      });
+      setEditingSource(null);
+    });
+  };
+
+  // 删除视频源
+  const handleDeleteSource = (source: DataSource) => {
+    setDeletingSource(source);
+  };
+
+  // 确认删除
+  const handleConfirmDeleteSource = async () => {
+    if (!deletingSource) return;
+    await withLoading(`deleteSource_${deletingSource.key}`, async () => {
+      await callSourceApi({ action: 'delete', key: deletingSource.key });
+      setDeletingSource(null);
+    });
+  };
+  
   // 批量操作相关状态
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
 
@@ -2407,6 +2448,13 @@ const VideoSourceConfig = ({
           >
             {!source.disabled ? '禁用' : '启用'}
           </button>
+          {/* 新增 编辑/删除 按钮 */}
+          <button
+            onClick={() => handleEditSource(source)}
+            className={buttonStyles.roundedPrimary}
+          >
+            编辑
+          </button>
           {source.from !== 'config' && (
             <button
               onClick={() => handleDelete(source.key)}
@@ -2726,6 +2774,98 @@ const VideoSourceConfig = ({
                   className={`px-4 py-2 ${!searchKeyword.trim() ? buttonStyles.disabled : buttonStyles.primary}`}
                 >
                   开始检测
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 编辑弹窗 */}
+      {editingSource && createPortal(
+        <div className='fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4' onClick={() => setEditingSource(null)}>
+          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full' onClick={e => e.stopPropagation()}>
+            <div className='p-6'>
+              <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4'>
+                编辑视频源
+              </h3>
+              <div className='space-y-4'>
+                <input
+                  type='text'
+                  value={editingSource.name}
+                  onChange={e => setEditingSource(s => s ? { ...s, name: e.target.value } : s)}
+                  className='w-full px-3 py-2 border rounded-lg'
+                  placeholder='名称'
+                />
+                <input
+                  type='text'
+                  value={editingSource.api}
+                  onChange={e => setEditingSource(s => s ? { ...s, api: e.target.value } : s)}
+                  className='w-full px-3 py-2 border rounded-lg'
+                  placeholder='API 地址'
+                />
+                <input
+                  type='text'
+                  value={editingSource.detail || ''}
+                  onChange={e => setEditingSource(s => s ? { ...s, detail: e.target.value } : s)}
+                  className='w-full px-3 py-2 border rounded-lg'
+                  placeholder='Detail 地址（选填）'
+                />
+                <div className='flex items-center gap-2'>
+                  <label className='text-sm'>禁用</label>
+                  <input
+                    type='checkbox'
+                    checked={!!editingSource.disabled}
+                    onChange={e => setEditingSource(s => s ? { ...s, disabled: e.target.checked } : s)}
+                  />
+                </div>
+              </div>
+              <div className='flex justify-end gap-3 mt-6'>
+                <button
+                  onClick={() => setEditingSource(null)}
+                  className={buttonStyles.secondary}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveEditSource}
+                  disabled={isLoading(`editSource_${editingSource.key}`)}
+                  className={isLoading(`editSource_${editingSource.key}`) ? buttonStyles.disabled : buttonStyles.primary}
+                >
+                  {isLoading(`editSource_${editingSource.key}`) ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+
+      {/* 删除确认弹窗 */}
+      {deletingSource && createPortal(
+        <div className='fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4' onClick={() => setDeletingSource(null)}>
+          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full' onClick={e => e.stopPropagation()}>
+            <div className='p-6'>
+              <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4'>
+                确认删除视频源
+              </h3>
+              <p className='text-sm text-gray-700 dark:text-gray-300 mb-6'>
+                是否删除 <strong>{deletingSource.name}</strong>？此操作不可恢复！
+              </p>
+              <div className='flex justify-end gap-3'>
+                <button
+                  onClick={() => setDeletingSource(null)}
+                  className={buttonStyles.secondary}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleConfirmDeleteSource}
+                  disabled={isLoading(`deleteSource_${deletingSource.key}`)}
+                  className={isLoading(`deleteSource_${deletingSource.key}`) ? buttonStyles.disabled : buttonStyles.danger}
+                >
+                  {isLoading(`deleteSource_${deletingSource.key}`) ? '删除中...' : '确认删除'}
                 </button>
               </div>
             </div>
