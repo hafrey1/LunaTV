@@ -2951,6 +2951,27 @@ const CategoryConfig = ({
     from: 'config',
   });
 
+  const [editingCategory, setEditingCategory] = useState<CustomCategory | null>(null);
+
+  // 编辑分类
+  const handleEditCategory = (category: CustomCategory) => {
+    setEditingCategory({ ...category });
+  };
+
+  // 保存编辑
+  const handleSaveEditCategory = async () => {
+    if (!editingCategory) return;
+    await withLoading(`editCategory_${editingCategory.query}_${editingCategory.type}`, async () => {
+      await callCategoryApi({
+        action: 'edit',
+        name: editingCategory.name,
+        type: editingCategory.type,
+        query: editingCategory.query,
+        disabled: editingCategory.disabled,
+      });
+      setEditingCategory(null);
+    });
+  };
   // dnd-kit 传感器
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -3123,6 +3144,15 @@ const CategoryConfig = ({
           >
             {!category.disabled ? '禁用' : '启用'}
           </button>
+          {/* 新增 编辑按钮 */}
+          {category.from !== 'config' && (
+            <button
+              onClick={() => handleEditCategory(category)}
+              className={buttonStyles.roundedPrimary}
+            >
+              编辑
+          </button>
+        )}
           {category.from !== 'config' && (
             <button
               onClick={() => handleDelete(category.query, category.type)}
@@ -3207,6 +3237,67 @@ const CategoryConfig = ({
         </div>
       )}
 
+      {/* 编辑弹窗 */}
+      {editingCategory && createPortal(
+        <div className='fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4' onClick={() => setEditingCategory(null)}>
+          <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-lg w-full' onClick={e => e.stopPropagation()}>
+            <div className='p-6'>
+              <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4'>
+                编辑分类
+              </h3>
+              <div className='space-y-4'>
+                <input
+                  type='text'
+                  value={editingCategory.name}
+                  onChange={e => setEditingCategory(c => c ? { ...c, name: e.target.value } : c)}
+                  className='w-full px-3 py-2 border rounded-lg'
+                  placeholder='分类名称'
+                />
+                <select
+                  value={editingCategory.type}
+                  onChange={e => setEditingCategory(c => c ? { ...c, type: e.target.value as 'movie' | 'tv' } : c)}
+                  className='w-full px-3 py-2 border rounded-lg'
+                >
+                  <option value='movie'>电影</option>
+                  <option value='tv'>电视剧</option>
+                </select>
+                <input
+                  type='text'
+                  value={editingCategory.query}
+                  onChange={e => setEditingCategory(c => c ? { ...c, query: e.target.value } : c)}
+                  className='w-full px-3 py-2 border rounded-lg'
+                  placeholder='搜索关键词'
+                />
+                <div className='flex items-center gap-2'>
+                  <label className='text-sm'>禁用</label>
+                  <input
+                    type='checkbox'
+                    checked={!!editingCategory.disabled}
+                    onChange={e => setEditingCategory(c => c ? { ...c, disabled: e.target.checked } : c)}
+                  />
+                </div>
+              </div>
+              <div className='flex justify-end gap-3 mt-6'>
+                <button
+                  onClick={() => setEditingCategory(null)}
+                  className={buttonStyles.secondary}
+                >
+                  取消
+                </button>
+                <button
+                  onClick={handleSaveEditCategory}
+                  disabled={isLoading(`editCategory_${editingCategory.query}_${editingCategory.type}`)}
+                  className={isLoading(`editCategory_${editingCategory.query}_${editingCategory.type}`) ? buttonStyles.disabled : buttonStyles.primary}
+                >
+                  {isLoading(`editCategory_${editingCategory.query}_${editingCategory.type}`) ? '保存中...' : '保存'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
+      
       {/* 分类表格 */}
       <div className='border border-gray-200 dark:border-gray-700 rounded-lg max-h-[28rem] overflow-y-auto overflow-x-auto relative'>
         <table className='min-w-full divide-y divide-gray-200 dark:divide-gray-700'>
