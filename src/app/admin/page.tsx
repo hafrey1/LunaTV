@@ -2807,6 +2807,8 @@ const CategoryConfig = ({
   const { isLoading, withLoading } = useLoadingState();
   const [categories, setCategories] = useState<CustomCategory[]>([]);
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showEditForm, setShowEditForm] = useState(false);
+  const [editingCategory, setEditingCategory] = useState<CustomCategory | null>(null);
   const [orderChanged, setOrderChanged] = useState(false);
   const [newCategory, setNewCategory] = useState<CustomCategory>({
     name: '',
@@ -2896,6 +2898,37 @@ const CategoryConfig = ({
       setShowAddForm(false);
     }).catch(() => {
       console.error('操作失败', 'add', newCategory);
+    });
+  };
+
+  const handleOpenEdit = (category: CustomCategory) => {
+    // clone to avoid editing original in list until saved
+    setEditingCategory({ ...category });
+    setShowEditForm(true);
+  };
+
+  const handleSaveEdit = () => {
+    if (!editingCategory) return;
+    if (!editingCategory.name || !editingCategory.query) return;
+
+    const original = categories.find((c) => c.query === editingCategory.query && c.type === editingCategory.type);
+    // Note: if query/type changed, backend needs identifiers; we pass originalQuery/originalType when available
+    const originalQuery = original ? original.query : editingCategory.query;
+    const originalType = original ? original.type : editingCategory.type;
+
+    withLoading('editCategory', async () => {
+      await callCategoryApi({
+        action: 'edit',
+        name: editingCategory.name,
+        type: editingCategory.type,
+        query: editingCategory.query,
+        originalQuery,
+        originalType,
+      });
+      setShowEditForm(false);
+      setEditingCategory(null);
+    }).catch(() => {
+      console.error('操作失败', 'edit', editingCategory);
     });
   };
 
@@ -2995,6 +3028,14 @@ const CategoryConfig = ({
               className={`${buttonStyles.roundedSecondary} ${isLoading(`deleteCategory_${category.query}_${category.type}`) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               删除
+            </button>
+          )}
+          {category.from !== 'config' && (
+            <button
+              onClick={() => handleOpenEdit(category)}
+              className={`${buttonStyles.roundedPrimary} ml-2`}
+            >
+              编辑
             </button>
           )}
         </td>
