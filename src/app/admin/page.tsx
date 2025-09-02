@@ -2041,6 +2041,37 @@ const VideoSourceConfig = ({
     from: 'config',
   });
 
+  // 新增编辑相关状态
+  const [editingSource, setEditingSource] = useState<DataSource | null>(null);
+
+  // 编辑保存
+  const handleEditSource = () => {
+    if (
+      !editingSource ||
+      !editingSource.name ||
+      !editingSource.key ||
+      !editingSource.api
+    )
+      return;
+
+    withLoading(`editSource_${editingSource.key}`, async () => {
+      await callSourceApi({
+        action: 'edit',
+        key: editingSource.key,
+        name: editingSource.name,
+        api: editingSource.api,
+        detail: editingSource.detail,
+      });
+      setEditingSource(null);
+    }).catch(() => {
+      console.error('操作失败', 'edit', editingSource);
+    });
+  };
+
+  // 编辑弹窗关闭
+  const handleCancelEdit = () => {
+    setEditingSource(null);
+  };
   // 批量操作相关状态
   const [selectedSources, setSelectedSources] = useState<Set<string>>(new Set());
 
@@ -2407,6 +2438,15 @@ const VideoSourceConfig = ({
           >
             {!source.disabled ? '禁用' : '启用'}
           </button>
+          {/* 编辑按钮 */}
+          {source.from !== 'config' && (
+            <button
+              onClick={() => setEditingSource(source)}
+              disabled={isLoading(`editSource_${source.key}`)}
+              className={`${buttonStyles.roundedPrimary} ${isLoading(`editSource_${source.key}`) ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              编辑
+          </button>
           {source.from !== 'config' && (
             <button
               onClick={() => handleDelete(source.key)}
@@ -2694,6 +2734,90 @@ const VideoSourceConfig = ({
         </div>
       )}
 
+      {/* 编辑弹窗 */}
+      {editingSource && createPortal(
+        <div className='fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4'
+         onClick={handleCancelEdit}>
+         <div className='bg-white dark:bg-gray-800 rounded-lg shadow-xl max-w-md w-full'
+          onClick={e => e.stopPropagation()}>
+          <div className='p-6'>
+            <div className='flex items-center justify-between mb-4'>
+              <h3 className='text-lg font-semibold text-gray-900 dark:text-gray-100'>
+                编辑视频源: {editingSource.name}
+              </h3>
+              <button
+                onClick={handleCancelEdit}
+                className='text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors'
+              >
+                <svg className='w-5 h-5' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
+                </svg>
+              </button>
+            </div>
+            <div className='space-y-4'>
+              <input
+                type='text'
+                placeholder='名称'
+                value={editingSource.name}
+                onChange={e =>
+                  setEditingSource(prev =>
+                    prev ? { ...prev, name: e.target.value } : null
+                  )
+                }
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+              />
+              <input
+                type='text'
+                placeholder='API 地址'
+                value={editingSource.api}
+                onChange={e =>
+                  setEditingSource(prev =>
+                    prev ? { ...prev, api: e.target.value } : null
+                  )
+                }
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+              />
+              <input
+                type='text'
+                placeholder='Detail 地址（选填）'
+                value={editingSource.detail || ''}
+                onChange={e =>
+                  setEditingSource(prev =>
+                    prev ? { ...prev, detail: e.target.value } : null
+                  )
+                }
+                className='w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100'
+              />
+            </div>
+            <div className='flex justify-end space-x-2 mt-6'>
+              <button
+                onClick={handleCancelEdit}
+                className={buttonStyles.secondary}
+              >
+                取消
+              </button>
+              <button
+                onClick={handleEditSource}
+                disabled={
+                  !editingSource.name ||
+                  !editingSource.api ||
+                  isLoading(`editSource_${editingSource.key}`)
+                }
+                className={`${!editingSource.name ||
+                  !editingSource.api ||
+                  isLoading(`editSource_${editingSource.key}`)
+                  ? buttonStyles.disabled
+                  : buttonStyles.success
+                  }`}
+              >
+                {isLoading(`editSource_${editingSource.key}`) ? '保存中...' : '保存'}
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>,
+      document.body
+    )}
       {/* 有效性检测弹窗 */}
       {showValidationModal && createPortal(
         <div className='fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50' onClick={() => setShowValidationModal(false)}>
