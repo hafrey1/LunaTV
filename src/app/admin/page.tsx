@@ -2194,6 +2194,35 @@ const VideoSourceConfig = ({
     });
   };
 
+   // 编辑保存
+  const handleEditSource = () => {
+    if (
+      !editingSource ||
+      !editingSource.name ||
+      !editingSource.key ||
+      !editingSource.api
+    )
+      return;
+
+    withLoading(`editSource_${editingSource.key}`, async () => {
+      await callSourceApi({
+        action: 'edit',
+        key: editingSource.key,
+        name: editingSource.name,
+        api: editingSource.api,
+        detail: editingSource.detail,
+      });
+      setEditingSource(null);
+    }).catch(() => {
+      console.error('操作失败', 'edit', editingSource);
+    });
+  };
+
+  // 编辑弹窗关闭
+  const handleCancelEdit = () => {
+    setEditingSource(null);
+  };
+
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -2213,6 +2242,7 @@ const VideoSourceConfig = ({
         console.error('操作失败', 'sort', order);
       });
   };
+
 
   // 有效性检测函数
   const handleValidateSources = async () => {
