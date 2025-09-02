@@ -2068,11 +2068,6 @@ const VideoSourceConfig = ({
     });
   };
 
-  // 删除视频源
-  const handleDeleteSource = (source: DataSource) => {
-    setDeletingSource(source);
-  };
-
   // 确认删除
   const handleConfirmDeleteSource = async () => {
     if (!deletingSource) return;
