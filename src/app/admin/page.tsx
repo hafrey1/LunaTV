@@ -2446,7 +2446,9 @@ const VideoSourceConfig = ({
               className={`${buttonStyles.roundedPrimary} ${isLoading(`editSource_${source.key}`) ? 'opacity-50 cursor-not-allowed' : ''}`}
             >
               编辑
-          </button>
+            </button>
+          )}
+          {/* 删除按钮 */}
           {source.from !== 'config' && (
             <button
               onClick={() => handleDelete(source.key)}
