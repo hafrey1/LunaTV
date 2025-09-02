@@ -2193,7 +2193,7 @@ const VideoSourceConfig = ({
       console.error('操作失败', 'add', newSource);
     });
   };
-  
+
   const handleDragEnd = (event: any) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
@@ -2213,7 +2213,6 @@ const VideoSourceConfig = ({
         console.error('操作失败', 'sort', order);
       });
   };
-
 
   // 有效性检测函数
   const handleValidateSources = async () => {
