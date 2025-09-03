@@ -2233,8 +2233,10 @@ function PlayPageClient() {
           // 其他浏览器：不显示 Chromecast（不支持 Cast API）
           ...(isChrome && !isIOS ? [
             artplayerPluginChromecast({
-              onStateChange: (state) => {
-                console.log('Chromecast state changed:', state);
+              onStateChange: (
+                state: 'disconnected' | 'connecting' | 'connected' | 'disconnecting'
+              ) => {
+                console.log('Chromecast state changed:', state)
               },
               onCastAvailable: (available) => {
                 console.log('Chromecast available:', available);
