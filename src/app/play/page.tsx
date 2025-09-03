@@ -2238,13 +2238,13 @@ function PlayPageClient() {
               ) => {
                 console.log('Chromecast state changed:', state)
               },
-              onCastAvailable: (available) => {
+              onCastAvailable: (available: boolean) => {
                 console.log('Chromecast available:', available);
               },
               onCastStart: () => {
                 console.log('Chromecast started');
               },
-              onError: (error) => {
+              onError: (error: Error) => {
                 console.error('Chromecast error:', error);
               }
             })
