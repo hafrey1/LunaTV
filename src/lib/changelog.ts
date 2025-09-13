@@ -16,9 +16,7 @@ export const changelog: ChangelogEntry[] = [
     added: [
       // 无新增内容
     ],
-    changed: [
-      // 无变更内容
-    ],
+    changed: ['用户注册功能及请求数据验证，待验证'],
     fixed: ['修复站点配置中流式搜索开关无法关闭的问题'],
   },
   {
