@@ -11,6 +11,17 @@ export interface ChangelogEntry {
 
 export const changelog: ChangelogEntry[] = [
   {
+    version: '101.1.5',
+    date: '2025-09-13',
+    added: [
+      // 无新增内容
+    ],
+    changed: [
+      // 无变更内容
+    ],
+    fixed: ['修复站点配置中流式搜索开关无法关闭的问题'],
+  },
+  {
     version: '101.1.4',
     date: '2025-09-13',
     added: [
