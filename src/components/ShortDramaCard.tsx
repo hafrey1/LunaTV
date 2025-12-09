@@ -88,32 +88,32 @@ function ShortDramaCard({
         }
 
         // 如果第1集失败，尝试第2集（episode=1）
-        if (!result || result.code !== 0 || !result.data?.totalEpisodes) {
+        if (!result || !result.totalEpisodes) {
           response = await fetch(`/api/shortdrama/parse?id=${drama.id}&episode=1`);
           if (response.ok) {
             result = await response.json();
           }
         }
 
-        // 检查 API 返回的数据结构：{ code: 0, data: { totalEpisodes: ... } }
-        if (result && result.code === 0 && result.data?.totalEpisodes && result.data.totalEpisodes > 0) {
-          setRealEpisodeCount(result.data.totalEpisodes);
+        if (result && result.totalEpisodes > 0) {
+          setRealEpisodeCount(result.totalEpisodes);
           // 使用统一缓存系统缓存结果
-          await setCache(cacheKey, result.data.totalEpisodes, SHORTDRAMA_CACHE_EXPIRE.episodes);
+          await setCache(cacheKey, result.totalEpisodes, SHORTDRAMA_CACHE_EXPIRE.episodes);
         } else {
           // 如果解析失败，缓存失败结果避免重复请求
-          await setCache(cacheKey, drama.episode_count, SHORTDRAMA_CACHE_EXPIRE.episodes / 24); // 1小时后重试
+          await setCache(cacheKey, 1, SHORTDRAMA_CACHE_EXPIRE.episodes / 24); // 1小时后重试
         }
       } catch (error) {
         console.error('获取集数失败:', error);
         // 网络错误时也缓存失败结果
-        await setCache(cacheKey, drama.episode_count, SHORTDRAMA_CACHE_EXPIRE.episodes / 24); // 1小时后重试
+        await setCache(cacheKey, 1, SHORTDRAMA_CACHE_EXPIRE.episodes / 24); // 1小时后重试
       }
     };
 
-    // 只有当集数为1（默认值/未知）或者没有缓存时才获取真实集数
-    // 这样可以避免对已有正确集数的短剧重复请求
-    fetchEpisodeCount();
+    // 只有当前集数为1（默认值）时才尝试获取真实集数
+    if (drama.episode_count === 1) {
+      fetchEpisodeCount();
+    }
   }, [drama.id, drama.episode_count]);
 
   // 处理收藏切换
