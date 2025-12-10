@@ -26,6 +26,7 @@ export interface Favorite {
   save_time: number; // 记录保存时间（时间戳）
   search_title: string; // 搜索时使用的标题
   origin?: 'vod' | 'live' | 'shortdrama';
+  type?: string; // 内容类型（movie/tv/variety/shortdrama等）
   releaseDate?: string; // 上映日期 (YYYY-MM-DD)，用于即将上映内容
   remarks?: string; // 备注信息（如"X天后上映"、"已上映"等）
 }
