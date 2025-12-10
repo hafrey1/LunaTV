@@ -417,6 +417,12 @@ async function parseWithAlternativeApi(
       throw new Error('备用API未返回播放链接');
     }
 
+    // 将 http:// 转换为 https:// 避免 Mixed Content 错误
+    const videoUrl = (directData.url || '').replace(/^http:\/\//i, 'https://');
+
+    // 备用API的视频链接通过代理访问（避免防盗链限制）
+    const proxyUrl = `/api/proxy/shortdrama?url=${encodeURIComponent(videoUrl)}`;
+
     return {
       code: 0,
       data: {
@@ -424,15 +430,15 @@ async function parseWithAlternativeApi(
         videoName: firstDrama.name,
         currentEpisode: episode,
         totalEpisodes: episodesData.data.length,
-        parsedUrl: directData.url || '',
-        proxyUrl: directData.url || '',
+        parsedUrl: proxyUrl,
+        proxyUrl: proxyUrl,
         cover: directData.pic || firstDrama.pic || '',
         description: firstDrama.overview || '',
         episode: {
           index: episode,
           label: `第${episode}集`,
-          parsedUrl: directData.url || '',
-          proxyUrl: directData.url || '',
+          parsedUrl: proxyUrl,
+          proxyUrl: proxyUrl,
           title: directData.title || `第${episode}集`,
         },
       },
