@@ -218,11 +218,11 @@ function ShortDramaCard({
             </div>
           )}
 
-          {/* 评分 */}
-          {drama.score > 0 && (
-            <div className="absolute top-2 right-2 flex items-center rounded bg-yellow-500 px-2 py-1 text-xs text-white">
-              <Star className="h-3 w-3 mr-1" fill="currentColor" />
-              {formatScore(drama.score)}
+          {/* 评分 - 使用vote_average字段 */}
+          {drama.vote_average && drama.vote_average > 0 && (
+            <div className="absolute top-2 right-2 flex items-center rounded-lg bg-gradient-to-br from-yellow-400 to-orange-500 px-2.5 py-1.5 text-xs font-bold text-white shadow-lg backdrop-blur-sm ring-2 ring-white/30 transition-all duration-300 group-hover:scale-110">
+              <Star className="h-3 w-3 mr-1 fill-current" />
+              {drama.vote_average.toFixed(1)}
             </div>
           )}
 
@@ -247,6 +247,18 @@ function ShortDramaCard({
           <h3 className="text-sm font-semibold text-gray-900 dark:text-white line-clamp-2 group-hover:text-transparent group-hover:bg-clip-text group-hover:bg-gradient-to-r group-hover:from-blue-600 group-hover:to-purple-600 dark:group-hover:from-blue-400 dark:group-hover:to-purple-400 transition-all duration-300">
             {drama.name}
           </h3>
+
+          {/* 演员信息 */}
+          {drama.author && (
+            <div className="flex items-center gap-1.5 text-xs">
+              <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 border border-blue-200/50 dark:border-blue-700/50">
+                <svg className="w-3 h-3 text-blue-600 dark:text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path>
+                </svg>
+                <span className="text-blue-700 dark:text-blue-300 font-medium line-clamp-1">{drama.author}</span>
+              </div>
+            </div>
+          )}
 
           <div className="flex items-center gap-1.5 text-xs">
             <div className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 border border-green-200/50 dark:border-green-700/50">

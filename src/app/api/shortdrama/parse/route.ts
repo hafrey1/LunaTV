@@ -13,6 +13,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = request.nextUrl;
     const id = searchParams.get('id');
     const episode = searchParams.get('episode');
+    const name = searchParams.get('name'); // 可选：用于备用API
 
     if (!id || !episode) {
       return NextResponse.json(
@@ -31,8 +32,8 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 解析视频，默认使用代理
-    const result = await parseShortDramaEpisode(videoId, episodeNum, true);
+    // 解析视频，默认使用代理，如果提供了剧名则自动支持备用API fallback
+    const result = await parseShortDramaEpisode(videoId, episodeNum, true, name || undefined);
 
     if (result.code !== 0) {
       return NextResponse.json(
