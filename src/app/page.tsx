@@ -764,7 +764,9 @@ function HomeClient() {
                     if (item.type) return item.type === 'movie';
                     // 向后兼容：没有 type 时用 episodes 判断
                     if (item.source === 'shortdrama' || item.source_name === '短剧') return false;
-                    // Bangumi/vod 来源：按集数判断
+                    if (item.source === 'bangumi') return false; // 排除动漫
+                    if (item.origin === 'live') return false; // 排除直播
+                    // vod 来源：按集数判断
                     return item.episodes === 1;
                   }).length,
                   tv: favoriteItems.filter(item => {
@@ -772,7 +774,9 @@ function HomeClient() {
                     if (item.type) return item.type === 'tv';
                     // 向后兼容：没有 type 时用 episodes 判断
                     if (item.source === 'shortdrama' || item.source_name === '短剧') return false;
-                    // Bangumi/vod 来源：按集数判断
+                    if (item.source === 'bangumi') return false; // 排除动漫
+                    if (item.origin === 'live') return false; // 排除直播
+                    // vod 来源：按集数判断
                     return item.episodes > 1;
                   }).length,
                   anime: favoriteItems.filter(item => {
@@ -897,7 +901,9 @@ function HomeClient() {
                       if (item.type) return item.type === 'movie';
                       // 向后兼容：没有 type 时用 episodes 判断
                       if (item.source === 'shortdrama' || item.source_name === '短剧') return false;
-                      // Bangumi/vod 来源：按集数判断
+                      if (item.source === 'bangumi') return false; // 排除动漫
+                      if (item.origin === 'live') return false; // 排除直播
+                      // vod 来源：按集数判断
                       return item.episodes === 1;
                     });
                   } else if (favoriteFilter === 'tv') {
@@ -907,6 +913,7 @@ function HomeClient() {
                       // 向后兼容：没有 type 时用 episodes 判断
                       if (item.source === 'shortdrama' || item.source_name === '短剧') return false;
                       if (item.source === 'bangumi') return false; // 排除动漫
+                      if (item.origin === 'live') return false; // 排除直播
                       // vod 来源：按集数判断
                       return item.episodes > 1;
                     });
