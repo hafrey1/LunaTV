@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getCacheTime } from '@/lib/config';
+import { getCacheTime, getConfig } from '@/lib/config';
 import { parseShortDramaEpisode } from '@/lib/shortdrama.client';
 
 // 标记为动态路由
@@ -32,8 +32,19 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 解析视频，默认使用代理，如果提供了剧名则自动支持备用API fallback
-    const result = await parseShortDramaEpisode(videoId, episodeNum, true, name || undefined);
+    // 读取配置以获取备用API地址
+    const config = await getConfig();
+    const shortDramaConfig = config.ShortDramaConfig;
+    const alternativeApiUrl = shortDramaConfig?.enableAlternative ? shortDramaConfig.alternativeApiUrl : undefined;
+
+    // 解析视频，默认使用代理，如果提供了剧名且配置了备用API则自动fallback
+    const result = await parseShortDramaEpisode(
+      videoId,
+      episodeNum,
+      true,
+      name || undefined,
+      alternativeApiUrl
+    );
 
     if (result.code !== 0) {
       return NextResponse.json(

@@ -11,29 +11,8 @@ import {
   getCache,
   setCache,
 } from './shortdrama-cache';
-import { getConfig } from './config';
 
 const SHORTDRAMA_API_BASE = 'https://api.r2afosne.dpdns.org';
-const ALTERNATIVE_API_BASE = 'https://001038.xyz'; // Alternative API for when primary is down
-
-// 获取短剧配置
-async function getShortDramaConfig() {
-  try {
-    const config = await getConfig();
-    return config.ShortDramaConfig || {
-      primaryApiUrl: SHORTDRAMA_API_BASE,
-      alternativeApiUrl: ALTERNATIVE_API_BASE,
-      enableAlternative: false,
-    };
-  } catch (error) {
-    console.error('获取短剧配置失败，使用默认值:', error);
-    return {
-      primaryApiUrl: SHORTDRAMA_API_BASE,
-      alternativeApiUrl: ALTERNATIVE_API_BASE,
-      enableAlternative: false,
-    };
-  }
-}
 
 // 检测是否为移动端环境
 const isMobile = () => {
@@ -315,16 +294,15 @@ export async function searchShortDramas(
 // 使用备用API解析单集视频
 async function parseWithAlternativeApi(
   dramaName: string,
-  episode: number
+  episode: number,
+  alternativeApiUrl: string
 ): Promise<ShortDramaParseResult> {
   try {
-    // 获取配置的备用API地址
-    const shortDramaConfig = await getShortDramaConfig();
-    const alternativeApiBase = shortDramaConfig.alternativeApiUrl || ALTERNATIVE_API_BASE;
+    const alternativeApiBase = alternativeApiUrl;
 
-    // 检查是否启用备用API
-    if (!shortDramaConfig.enableAlternative || !alternativeApiBase) {
-      console.log('备用API未启用或未配置');
+    // 检查是否提供了备用API地址
+    if (!alternativeApiBase) {
+      console.log('备用API地址未配置');
       return {
         code: -1,
         msg: '备用API未启用',
@@ -436,7 +414,8 @@ export async function parseShortDramaEpisode(
   id: number,
   episode: number,
   useProxy = true,
-  dramaName?: string
+  dramaName?: string,
+  alternativeApiUrl?: string
 ): Promise<ShortDramaParseResult> {
   try {
     const params = new URLSearchParams({
@@ -478,10 +457,10 @@ export async function parseShortDramaEpisode(
 
     // API可能返回错误信息
     if (data.code === 1) {
-      // 如果主API失败且提供了剧名，尝试使用备用API
-      if (dramaName) {
+      // 如果主API失败且提供了剧名和备用API地址，尝试使用备用API
+      if (dramaName && alternativeApiUrl) {
         console.log('主API失败，尝试使用备用API...');
-        return await parseWithAlternativeApi(dramaName, episode);
+        return await parseWithAlternativeApi(dramaName, episode, alternativeApiUrl);
       }
       return {
         code: data.code,
@@ -506,10 +485,10 @@ export async function parseShortDramaEpisode(
     };
   } catch (error) {
     console.error('解析短剧集数失败:', error);
-    // 如果主API网络请求失败且提供了剧名，尝试使用备用API
-    if (dramaName) {
+    // 如果主API网络请求失败且提供了剧名和备用API地址，尝试使用备用API
+    if (dramaName && alternativeApiUrl) {
       console.log('主API网络错误，尝试使用备用API...');
-      return await parseWithAlternativeApi(dramaName, episode);
+      return await parseWithAlternativeApi(dramaName, episode, alternativeApiUrl);
     }
     return {
       code: -1,

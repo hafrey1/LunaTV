@@ -2,7 +2,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 
-import { getCacheTime } from '@/lib/config';
+import { getCacheTime, getConfig } from '@/lib/config';
 import { parseShortDramaEpisode } from '@/lib/shortdrama.client';
 
 // 标记为动态路由
@@ -32,17 +32,40 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // 先尝试指定集数，如果提供了剧名则自动支持备用API fallback
-    let result = await parseShortDramaEpisode(videoId, episodeNum, true, name || undefined);
+    // 读取配置以获取备用API地址
+    const config = await getConfig();
+    const shortDramaConfig = config.ShortDramaConfig;
+    const alternativeApiUrl = shortDramaConfig?.enableAlternative ? shortDramaConfig.alternativeApiUrl : undefined;
+
+    // 先尝试指定集数，如果提供了剧名且配置了备用API则自动fallback
+    let result = await parseShortDramaEpisode(
+      videoId,
+      episodeNum,
+      true,
+      name || undefined,
+      alternativeApiUrl
+    );
 
     // 如果失败，尝试其他集数
     if (result.code !== 0 || !result.data || !result.data.totalEpisodes) {
-      result = await parseShortDramaEpisode(videoId, episodeNum === 1 ? 2 : 1, true, name || undefined);
+      result = await parseShortDramaEpisode(
+        videoId,
+        episodeNum === 1 ? 2 : 1,
+        true,
+        name || undefined,
+        alternativeApiUrl
+      );
     }
 
     // 如果还是失败，尝试第0集
     if (result.code !== 0 || !result.data || !result.data.totalEpisodes) {
-      result = await parseShortDramaEpisode(videoId, 0, true, name || undefined);
+      result = await parseShortDramaEpisode(
+        videoId,
+        0,
+        true,
+        name || undefined,
+        alternativeApiUrl
+      );
     }
 
     if (result.code !== 0 || !result.data) {
@@ -70,6 +93,7 @@ export async function GET(request: NextRequest) {
       year: new Date().getFullYear().toString(),
       desc: result.data!.description,
       type_name: '短剧',
+      drama_name: result.data!.videoName, // 添加剧名，用于备用API fallback
     };
 
     // 设置与豆瓣一致的缓存策略
