@@ -33,9 +33,24 @@ export async function GET(request: NextRequest) {
     }
 
     // 读取配置以获取备用API地址
-    const config = await getConfig();
-    const shortDramaConfig = config.ShortDramaConfig;
-    const alternativeApiUrl = shortDramaConfig?.enableAlternative ? shortDramaConfig.alternativeApiUrl : undefined;
+    let alternativeApiUrl: string | undefined;
+    try {
+      const config = await getConfig();
+      const shortDramaConfig = config.ShortDramaConfig;
+      alternativeApiUrl = shortDramaConfig?.enableAlternative ? shortDramaConfig.alternativeApiUrl : undefined;
+
+      // 调试日志
+      console.log('[ShortDrama Detail] 配置读取:', {
+        hasConfig: !!shortDramaConfig,
+        enableAlternative: shortDramaConfig?.enableAlternative,
+        hasAlternativeUrl: !!alternativeApiUrl,
+        name: name,
+      });
+    } catch (configError) {
+      console.error('读取短剧配置失败:', configError);
+      // 配置读取失败时，不使用备用API
+      alternativeApiUrl = undefined;
+    }
 
     // 先尝试指定集数，如果提供了剧名且配置了备用API则自动fallback
     let result = await parseShortDramaEpisode(
@@ -78,12 +93,13 @@ export async function GET(request: NextRequest) {
     const totalEpisodes = Math.max(result.data.totalEpisodes || 1, 1);
 
     // 转换为兼容格式
-    const response = {
-      id: result.data!.videoId.toString(),
+    // 注意：始终使用请求的原始ID（主API的ID），不使用result.data.videoId（可能是备用API的ID）
+    const response: any = {
+      id: id, // 使用原始请求ID，保持一致性
       title: result.data!.videoName,
       poster: result.data!.cover,
       episodes: Array.from({ length: totalEpisodes }, (_, i) =>
-        `shortdrama:${result.data!.videoId}:${i}` // API实际使用0-based索引
+        `shortdrama:${id}:${i}` // 使用原始请求ID
       ),
       episodes_titles: Array.from({ length: totalEpisodes }, (_, i) =>
         `第${i + 1}集`
@@ -95,6 +111,11 @@ export async function GET(request: NextRequest) {
       type_name: '短剧',
       drama_name: result.data!.videoName, // 添加剧名，用于备用API fallback
     };
+
+    // 如果备用API返回了元数据，添加到响应中
+    if (result.metadata) {
+      response.metadata = result.metadata;
+    }
 
     // 设置与豆瓣一致的缓存策略
     const cacheTime = await getCacheTime();

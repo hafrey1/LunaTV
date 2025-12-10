@@ -187,6 +187,13 @@ export interface SearchResult {
   douban_id?: number;
   remarks?: string; // 备注信息（如"已完结"、"更新至20集"等）
   drama_name?: string; // 短剧名称（用于备用API fallback）
+  metadata?: {
+    // 备用API提供的额外元数据
+    author?: string;
+    backdrop?: string;
+    vote_average?: number;
+    tmdb_id?: number;
+  };
 }
 
 // 豆瓣数据结构

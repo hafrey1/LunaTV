@@ -33,9 +33,16 @@ export async function GET(request: NextRequest) {
     }
 
     // 读取配置以获取备用API地址
-    const config = await getConfig();
-    const shortDramaConfig = config.ShortDramaConfig;
-    const alternativeApiUrl = shortDramaConfig?.enableAlternative ? shortDramaConfig.alternativeApiUrl : undefined;
+    let alternativeApiUrl: string | undefined;
+    try {
+      const config = await getConfig();
+      const shortDramaConfig = config.ShortDramaConfig;
+      alternativeApiUrl = shortDramaConfig?.enableAlternative ? shortDramaConfig.alternativeApiUrl : undefined;
+    } catch (configError) {
+      console.error('读取短剧配置失败:', configError);
+      // 配置读取失败时，不使用备用API
+      alternativeApiUrl = undefined;
+    }
 
     // 解析视频，默认使用代理，如果提供了剧名且配置了备用API则自动fallback
     const result = await parseShortDramaEpisode(
