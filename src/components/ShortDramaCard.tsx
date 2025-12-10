@@ -33,6 +33,7 @@ function ShortDramaCard({
   className = '',
 }: ShortDramaCardProps) {
   const [realEpisodeCount, setRealEpisodeCount] = useState<number>(drama.episode_count);
+  const [showEpisodeCount, setShowEpisodeCount] = useState(drama.episode_count > 1); // 如果初始集数>1就显示
   const [imageLoaded, setImageLoaded] = useState(false); // 图片加载状态
   const [favorited, setFavorited] = useState(false); // 收藏状态
 
@@ -73,8 +74,13 @@ function ShortDramaCard({
 
       // 检查统一缓存
       const cached = await getCache(cacheKey);
-      if (cached && typeof cached === 'number' && cached > 0) {
-        setRealEpisodeCount(cached);
+      if (cached && typeof cached === 'number') {
+        if (cached > 1) {
+          setRealEpisodeCount(cached);
+          setShowEpisodeCount(true);
+        } else {
+          setShowEpisodeCount(false);
+        }
         return;
       }
 
@@ -95,18 +101,21 @@ function ShortDramaCard({
           }
         }
 
-        if (result && result.totalEpisodes > 0) {
+        if (result && result.totalEpisodes > 1) {
           setRealEpisodeCount(result.totalEpisodes);
+          setShowEpisodeCount(true);
           // 使用统一缓存系统缓存结果
           await setCache(cacheKey, result.totalEpisodes, SHORTDRAMA_CACHE_EXPIRE.episodes);
         } else {
-          // 如果解析失败，缓存失败结果避免重复请求
-          await setCache(cacheKey, 1, SHORTDRAMA_CACHE_EXPIRE.episodes / 24); // 1小时后重试
+          // 如果解析失败或集数<=1，不显示集数标签，缓存0避免重复请求
+          setShowEpisodeCount(false);
+          await setCache(cacheKey, 0, SHORTDRAMA_CACHE_EXPIRE.episodes / 24); // 1小时后重试
         }
       } catch (error) {
         console.error('获取集数失败:', error);
-        // 网络错误时也缓存失败结果
-        await setCache(cacheKey, 1, SHORTDRAMA_CACHE_EXPIRE.episodes / 24); // 1小时后重试
+        // 网络错误时不显示集数标签
+        setShowEpisodeCount(false);
+        await setCache(cacheKey, 0, SHORTDRAMA_CACHE_EXPIRE.episodes / 24); // 1小时后重试
       }
     };
 
@@ -199,13 +208,15 @@ function ShortDramaCard({
             </div>
           </div>
 
-          {/* 集数标识 - 玻璃态美化 */}
-          <div className="absolute top-2 left-2 rounded-full bg-gradient-to-br from-purple-500/90 via-pink-500/90 to-rose-500/90 backdrop-blur-md px-3 py-1.5 text-xs font-bold text-white shadow-lg ring-2 ring-white/30 transition-all duration-300 group-hover:scale-110 group-hover:shadow-purple-500/50">
-            <span className="flex items-center gap-1">
-              <Play size={10} className="fill-current" />
-              {realEpisodeCount}集
-            </span>
-          </div>
+          {/* 集数标识 - 玻璃态美化 - 只在集数>1时显示 */}
+          {showEpisodeCount && (
+            <div className="absolute top-2 left-2 rounded-full bg-gradient-to-br from-purple-500/90 via-pink-500/90 to-rose-500/90 backdrop-blur-md px-3 py-1.5 text-xs font-bold text-white shadow-lg ring-2 ring-white/30 transition-all duration-300 group-hover:scale-110 group-hover:shadow-purple-500/50">
+              <span className="flex items-center gap-1">
+                <Play size={10} className="fill-current" />
+                {realEpisodeCount}集
+              </span>
+            </div>
+          )}
 
           {/* 评分 */}
           {drama.score > 0 && (
