@@ -3310,11 +3310,8 @@ function PlayPageClient() {
             })
           ] : []),
           // 毛玻璃效果控制栏插件 - 现代化悬浮设计
-          artplayerPluginLiquidGlass({
-            width: '90%',           // 控制栏宽度为容器的90%
-            'max-width': '1000px',  // 最大宽度1000px，避免在超宽屏上过宽
-            'min-width': '300px'    // 最小宽度300px，保证移动端可用
-          })
+          // CSS已优化：桌面98%宽度，移动端100%，按钮可自动缩小适应
+          artplayerPluginLiquidGlass()
         ],
       });
 

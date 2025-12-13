@@ -203,11 +203,11 @@ div[data-media-provider] video {
 }
 
 /* 移动端控制按钮优化 */
-/* 使用liquid-glass插件后，控制栏有固定宽度（90%, max 1000px, min 300px） */
-/* PiP按钮对移动端用户很重要，保留给所有设备 */
+/* 使用liquid-glass插件 + 按钮自动缩小方案，所有按钮都能显示 */
+/* 调整媒体查询从1024px到768px，让平板设备可以使用更多功能 */
 @media (max-width: 768px) {
-  /* PiP按钮不再隐藏 - 移动端用户需要画中画功能 */
-  /* .art-control-pip - 已启用 */
+  /* PiP按钮保留 - 移动端用户需要画中画功能 */
+  /* 通过flex-shrink: 1让按钮自动缩小，避免溢出 */
 
   /* 网页全屏在移动端意义不大，继续隐藏节省空间 */
   .art-control-fullscreenWeb {
