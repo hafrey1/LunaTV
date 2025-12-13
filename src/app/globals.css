@@ -341,7 +341,8 @@ div[data-media-provider] video {
   transition: all 0.3s ease-in-out;
 }
 
-/* 移动端隐藏弹幕配置按钮 */
+/* 移动端隐藏弹幕配置按钮 - 使用设置面板简化配置 */
+/* 桌面端保留完整配置按钮 - 提供更多高级选项 */
 @media (max-width: 1080px), (hover: none) {
   .artplayer-plugin-danmuku .apd-config {
     display: none !important;
