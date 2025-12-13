@@ -202,16 +202,19 @@ div[data-media-provider] video {
   background-color: #000 !important; /* 其余区域填充为黑色 */
 }
 
-/* 隐藏移动端竖屏时的 pip 按钮 */
-@media (max-width: 1024px) {
-  .art-control-pip {
-    display: none !important;
-  }
+/* 移动端控制按钮优化 */
+/* 使用liquid-glass插件后，控制栏有固定宽度（90%, max 1000px, min 300px） */
+/* PiP按钮对移动端用户很重要，保留给所有设备 */
+@media (max-width: 768px) {
+  /* PiP按钮不再隐藏 - 移动端用户需要画中画功能 */
+  /* .art-control-pip - 已启用 */
 
+  /* 网页全屏在移动端意义不大，继续隐藏节省空间 */
   .art-control-fullscreenWeb {
     display: none !important;
   }
 
+  /* 音量控制在移动端有物理按键，隐藏以节省空间 */
   .art-control-volume {
     display: none !important;
   }

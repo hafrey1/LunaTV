@@ -13,6 +13,7 @@ import PageLayout from '@/components/PageLayout';
 import SkipController, { SkipSettingsButton } from '@/components/SkipController';
 import VideoCard from '@/components/VideoCard';
 import artplayerPluginChromecast from '@/lib/artplayer-plugin-chromecast';
+import artplayerPluginLiquidGlass from '@/lib/artplayer-plugin-liquid-glass';
 import { ClientCache } from '@/lib/client-cache';
 import {
   deleteFavorite,
@@ -2881,7 +2882,7 @@ function PlayPageClient() {
         pip: true,
         autoSize: false,
         autoMini: false,
-        screenshot: false,
+        screenshot: !isMobile, // 桌面端启用截图功能
         setting: true,
         loop: false,
         flip: false,
@@ -3308,6 +3309,12 @@ function PlayPageClient() {
               }
             })
           ] : []),
+          // 毛玻璃效果控制栏插件 - 现代化悬浮设计
+          artplayerPluginLiquidGlass({
+            width: '90%',           // 控制栏宽度为容器的90%
+            'max-width': '1000px',  // 最大宽度1000px，避免在超宽屏上过宽
+            'min-width': '300px'    // 最小宽度300px，保证移动端可用
+          })
         ],
       });
 
