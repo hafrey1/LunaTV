@@ -3095,7 +3095,7 @@ function PlayPageClient() {
             selector: (() => {
               // 从 localStorage 读取保存的值
               const savedFontSize = parseInt(localStorage.getItem('danmaku_fontSize') || '25');
-              const savedSpeed = parseInt(localStorage.getItem('danmaku_speed') || '6');
+              const savedSpeed = parseFloat(localStorage.getItem('danmaku_speed') || '5');
               const savedOpacity = parseFloat(localStorage.getItem('danmaku_opacity') || '0.8');
               const savedMargin = JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]');
               const savedModes = JSON.parse(localStorage.getItem('danmaku_modes') || '[0, 1, 2]');
@@ -3127,10 +3127,10 @@ function PlayPageClient() {
                   tooltip: '弹幕滚动速度',
                   selector: [
                     { html: '极慢', value: 10, default: savedSpeed === 10 },
-                    { html: '较慢', value: 8, default: savedSpeed === 8 },
-                    { html: '正常', value: 6, default: savedSpeed === 6 },
-                    { html: '较快', value: 4, default: savedSpeed === 4 },
-                    { html: '极快', value: 2, default: savedSpeed === 2 },
+                    { html: '较慢', value: 7.5, default: savedSpeed === 7.5 },
+                    { html: '适中', value: 5, default: savedSpeed === 5 },
+                    { html: '较快', value: 2.5, default: savedSpeed === 2.5 },
+                    { html: '极快', value: 1, default: savedSpeed === 1 },
                   ],
                   onSelect: function (item: any) {
                     localStorage.setItem('danmaku_speed', String(item.value));
@@ -3265,7 +3265,7 @@ function PlayPageClient() {
             const getOptimizedConfig = () => {
               const baseConfig = {
                 danmuku: [], // 初始为空数组，后续通过load方法加载
-                speed: parseInt(localStorage.getItem('danmaku_speed') || '6'),
+                speed: parseFloat(localStorage.getItem('danmaku_speed') || '5'),
                 opacity: parseFloat(localStorage.getItem('danmaku_opacity') || '0.8'),
                 fontSize: parseInt(localStorage.getItem('danmaku_fontSize') || '25'),
                 color: '#FFFFFF',
