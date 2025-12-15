@@ -26,7 +26,7 @@ import {
   savePlayRecord,
   subscribeToDataUpdates,
 } from '@/lib/db.client';
-import { getDoubanDetails, getDoubanComments, getDoubanActorMovies } from '@/lib/douban.client';
+import { getDoubanDetails, getDoubanComments } from '@/lib/douban.client';
 import { SearchResult } from '@/lib/types';
 import { getVideoResolutionFromM3u8, processImageUrl } from '@/lib/utils';
 
@@ -88,12 +88,6 @@ function PlayPageClient() {
   const [netdiskLoading, setNetdiskLoading] = useState(false);
   const [netdiskError, setNetdiskError] = useState<string | null>(null);
   const [netdiskTotal, setNetdiskTotal] = useState(0);
-
-  // 演员作品状态
-  const [selectedCelebrity, setSelectedCelebrity] = useState<{id: string; name: string} | null>(null);
-  const [celebrityWorks, setCelebrityWorks] = useState<any[]>([]);
-  const [loadingCelebrityWorks, setLoadingCelebrityWorks] = useState(false);
-  const [showCelebrityModal, setShowCelebrityModal] = useState(false);
 
   // SkipController 相关状态
   const [isSkipSettingOpen, setIsSkipSettingOpen] = useState(false);
@@ -750,41 +744,6 @@ function PlayPageClient() {
     } finally {
       setNetdiskLoading(false);
     }
-  };
-
-  // 处理演员点击事件
-  const handleCelebrityClick = async (celebrity: {id: string; name: string}) => {
-    setSelectedCelebrity(celebrity);
-    setShowCelebrityModal(true);
-    setLoadingCelebrityWorks(true);
-    setCelebrityWorks([]);
-
-    try {
-      console.log('获取演员作品:', celebrity.name);
-      const result = await getDoubanActorMovies({
-        actorName: celebrity.name,
-        type: 'movie',
-        pageLimit: 20
-      });
-
-      if (result.code === 200 && result.list) {
-        setCelebrityWorks(result.list);
-        console.log(`找到 ${result.list.length} 部作品`);
-      } else {
-        console.error('获取演员作品失败:', result.message);
-      }
-    } catch (error) {
-      console.error('获取演员作品出错:', error);
-    } finally {
-      setLoadingCelebrityWorks(false);
-    }
-  };
-
-  // 关闭演员作品模态框
-  const closeCelebrityModal = () => {
-    setShowCelebrityModal(false);
-    setSelectedCelebrity(null);
-    setCelebrityWorks([]);
   };
 
   // 播放源优选函数（针对旧iPad做极端保守优化）
@@ -5032,9 +4991,11 @@ function PlayPageClient() {
                   </h3>
                   <div className='flex gap-4 overflow-x-auto pb-4 scrollbar-hide'>
                     {movieDetails.celebrities.slice(0, 15).map((celebrity: any) => (
-                      <div
+                      <a
                         key={celebrity.id}
-                        onClick={() => handleCelebrityClick({id: celebrity.id, name: celebrity.name})}
+                        href={`https://www.douban.com/personage/${celebrity.id}/`}
+                        target='_blank'
+                        rel='noopener noreferrer'
                         className='flex-shrink-0 text-center group cursor-pointer'
                       >
                         <div className='w-20 h-20 rounded-full overflow-hidden bg-gray-200 dark:bg-gray-700 mb-2 ring-2 ring-transparent group-hover:ring-blue-500 transition-all duration-300 group-hover:scale-110 shadow-md group-hover:shadow-xl'>
@@ -5057,7 +5018,7 @@ function PlayPageClient() {
                             {celebrity.role}
                           </p>
                         )}
-                      </div>
+                      </a>
                     ))}
                   </div>
                 </div>
@@ -5398,73 +5359,6 @@ function PlayPageClient() {
 
         <ChevronUp className='w-6 h-6 text-white relative z-10 transition-all duration-300 group-hover:scale-110 group-hover:-translate-y-1' />
       </button>
-
-      {/* 演员作品模态框 */}
-      {showCelebrityModal && (
-        <div
-          className='fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4'
-          onClick={closeCelebrityModal}
-        >
-          <div
-            className='bg-white dark:bg-gray-800 rounded-2xl max-w-6xl w-full max-h-[85vh] overflow-hidden shadow-2xl'
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* 模态框头部 */}
-            <div className='bg-gradient-to-r from-blue-500 to-purple-600 px-6 py-4 flex justify-between items-center'>
-              <h2 className='text-xl font-bold text-white flex items-center gap-2'>
-                <span>🎬</span>
-                <span>{selectedCelebrity?.name} 的作品</span>
-              </h2>
-              <button
-                onClick={closeCelebrityModal}
-                className='text-white hover:bg-white/20 rounded-full p-2 transition-colors'
-                aria-label='关闭'
-              >
-                <svg xmlns='http://www.w3.org/2000/svg' className='h-6 w-6' fill='none' viewBox='0 0 24 24' stroke='currentColor'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M6 18L18 6M6 6l12 12' />
-                </svg>
-              </button>
-            </div>
-
-            {/* 模态框内容 */}
-            <div className='p-6 overflow-y-auto max-h-[calc(85vh-80px)]'>
-              {loadingCelebrityWorks ? (
-                <div className='flex flex-col items-center justify-center py-12'>
-                  <div className='animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500 mb-4'></div>
-                  <p className='text-gray-600 dark:text-gray-400'>正在加载作品...</p>
-                </div>
-              ) : celebrityWorks.length > 0 ? (
-                <>
-                  <p className='text-sm text-gray-600 dark:text-gray-400 mb-4'>
-                    找到 {celebrityWorks.length} 部相关作品
-                  </p>
-                  <div className='grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-4'>
-                    {celebrityWorks.map((work: any) => (
-                      <VideoCard
-                        key={work.id}
-                        id={work.id}
-                        title={work.title}
-                        poster={work.poster}
-                        rate={work.rate}
-                        year={work.year}
-                        from='douban'
-                        douban_id={parseInt(work.id)}
-                      />
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <div className='text-center py-12'>
-                  <p className='text-gray-500 dark:text-gray-400 mb-2'>暂无相关作品</p>
-                  <p className='text-sm text-gray-400 dark:text-gray-500'>
-                    可能该演员的作品暂未收录
-                  </p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
     </PageLayout>
   );
 }
