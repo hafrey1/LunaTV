@@ -5,7 +5,7 @@ permissions:
 
 on:
   schedule:
-    - cron: "0 * * * *" # every hour
+    - cron: "0 17 * * *"  # 每天北京时间凌晨1点运行 (UTC 17点)
   workflow_dispatch:
 
 jobs:
