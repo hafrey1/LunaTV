@@ -14,6 +14,7 @@ import { ThemeProvider } from '../components/ThemeProvider';
 import { WatchRoomProvider } from '../components/WatchRoomProvider';
 import { DownloadProvider } from '../contexts/DownloadContext';
 import { DownloadPanel } from '../components/download/DownloadPanel';
+import ChatFloatingWindow from '../components/watch-room/ChatFloatingWindow';
 
 const inter = Inter({ subsets: ['latin'] });
 export const dynamic = 'force-dynamic';
@@ -128,6 +129,7 @@ export default async function RootLayout({
                 <GlobalErrorIndicator />
               </SiteProvider>
               <DownloadPanel />
+              <ChatFloatingWindow />
             </WatchRoomProvider>
           </DownloadProvider>
         </ThemeProvider>

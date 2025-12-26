@@ -2,13 +2,17 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { MessageCircle, X, Send, Smile, Info, Users, LogOut, Mic, MicOff, Volume2, VolumeX } from 'lucide-react';
+import { MessageCircle, X, Send, Smile, Info, Users, LogOut, Mic, MicOff, Volume2, VolumeX, Play } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useWatchRoomContextSafe } from '@/components/WatchRoomProvider';
 import { useVoiceChat } from '@/hooks/useVoiceChat';
+import MiniVideoCard from '@/components/watch-room/MiniVideoCard';
+import type { PlayState } from '@/types/watch-room.types';
 
 const EMOJI_LIST = ['😀', '😂', '😍', '🥰', '😎', '🤔', '👍', '👏', '🎉', '❤️', '🔥', '⭐'];
 
 export default function ChatFloatingWindow() {
+  const router = useRouter();
   const watchRoom = useWatchRoomContextSafe();
   const [isOpen, setIsOpen] = useState(false);
   const [message, setMessage] = useState('');
@@ -132,7 +136,7 @@ export default function ChatFloatingWindow() {
   // 悬浮按钮组
   if (!isOpen && !showRoomInfo) {
     return (
-      <div className="fixed bottom-20 right-4 z-[700] flex flex-col gap-3 md:bottom-4">
+      <div className="fixed bottom-36 right-6 z-[700] flex flex-col gap-3 md:bottom-24">
         {/* 房间信息按钮 */}
         <button
           onClick={() => setShowRoomInfo(true)}
@@ -164,7 +168,7 @@ export default function ChatFloatingWindow() {
   // 房间信息面板
   if (showRoomInfo) {
     return (
-      <div className="fixed bottom-20 right-4 z-[700] w-80 rounded-2xl bg-white dark:bg-gray-800 shadow-2xl md:bottom-4">
+      <div className="fixed bottom-36 right-6 z-[700] w-80 rounded-2xl bg-white dark:bg-gray-800 shadow-2xl md:bottom-24">
         {/* 头部 */}
         <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-4">
           <div className="flex items-center gap-2">
@@ -197,6 +201,44 @@ export default function ChatFloatingWindow() {
             <p className="text-sm text-gray-500 dark:text-gray-400">房间号</p>
             <p className="font-mono font-bold text-lg text-gray-900 dark:text-gray-100">{currentRoom.id}</p>
           </div>
+
+          {/* 正在观看的影片 */}
+          {currentRoom.currentState && currentRoom.currentState.type === 'play' && (
+            <div>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1">
+                <Play className="h-4 w-4 text-green-500" />
+                正在观看
+              </p>
+              <MiniVideoCard
+                title={currentRoom.currentState.videoName}
+                year={currentRoom.currentState.videoYear}
+                episode={currentRoom.currentState.episode}
+                poster={currentRoom.currentState.poster}
+                totalEpisodes={currentRoom.currentState.totalEpisodes}
+                onClick={() => {
+                  const state = currentRoom.currentState as PlayState;
+                  // 构建URL，携带时间参数实现同步
+                  const params = new URLSearchParams();
+                  params.set('id', state.videoId);
+                  params.set('source', state.source);
+                  params.set('title', state.videoName);
+                  if (state.videoYear) params.set('year', state.videoYear);
+                  if (state.searchTitle) params.set('stitle', state.searchTitle);
+                  if (state.episode !== undefined && state.episode !== null) {
+                    params.set('index', state.episode.toString());
+                  }
+                  // 🎯 关键：携带当前播放时间，实现时间同步
+                  if (state.currentTime) {
+                    params.set('t', state.currentTime.toString());
+                  }
+                  params.set('prefer', 'true');
+
+                  router.push(`/play?${params.toString()}`);
+                  setShowRoomInfo(false);
+                }}
+              />
+            </div>
+          )}
 
           <div>
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-2 flex items-center gap-1">
@@ -239,7 +281,7 @@ export default function ChatFloatingWindow() {
 
   // 聊天窗口
   return (
-    <div className="fixed bottom-20 right-4 z-[700] flex w-80 flex-col rounded-2xl bg-white dark:bg-gray-800 shadow-2xl md:bottom-4" style={{ height: '500px' }}>
+    <div className="fixed bottom-36 right-6 z-[700] flex w-80 flex-col rounded-2xl bg-white dark:bg-gray-800 shadow-2xl md:bottom-24" style={{ height: '500px' }}>
       {/* 头部 */}
       <div className="flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-4">
         <div className="flex items-center gap-2">
