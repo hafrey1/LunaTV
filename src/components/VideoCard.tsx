@@ -24,6 +24,7 @@ import {
 } from '@/lib/db.client';
 import { processImageUrl, isSeriesCompleted } from '@/lib/utils';
 import { useLongPress } from '@/hooks/useLongPress';
+import { useDoubanInfo } from '@/hooks/useDoubanInfo';
 
 import { ImagePlaceholder } from '@/components/ImagePlaceholder';
 import MobileActionSheet from '@/components/MobileActionSheet';
@@ -102,6 +103,13 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
     searchFavorited,
     (_state, newValue: boolean | null) => newValue
   );
+
+  // 🎬 豆瓣信息 Hook - 仅在有 douban_id 时才获取
+  const { detail, detailLoading } = useDoubanInfo(douban_id, {
+    fetchDetail: !!douban_id && from === 'douban', // 只在豆瓣页面获取详情
+    fetchComments: false, // VideoCard 不需要评论
+    commentsCount: 0,
+  });
 
   // 可外部修改的可控字段
   const [dynamicEpisodes, setDynamicEpisodes] = useState<number | undefined>(
@@ -730,6 +738,7 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
                 }, 2000);
               } else {
                 // 重试失败，使用通用占位图
+                img.src = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="200" height="300" viewBox="0 0 200 300"%3E%3Crect fill="%23374151" width="200" height="300"/%3E%3Cg fill="%239CA3AF"%3E%3Cpath d="M100 80 L100 120 M80 100 L120 100" stroke="%239CA3AF" stroke-width="8" stroke-linecap="round"/%3E%3Crect x="60" y="140" width="80" height="100" rx="5" fill="none" stroke="%239CA3AF" stroke-width="4"/%3E%3Cpath d="M70 160 L90 180 L130 140" stroke="%239CA3AF" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/%3E%3C/g%3E%3Ctext x="100" y="270" font-family="Arial" font-size="12" fill="%239CA3AF" text-anchor="middle"%3E暂无海报%3C/text%3E%3C/svg%3E';
                 setImageLoaded(true);
               }
             }}
@@ -1320,6 +1329,42 @@ const VideoCard = forwardRef<VideoCardHandle, VideoCardProps>(function VideoCard
               ></div>
             </div>
           </div>
+
+          {/* 🎬 演员头像列表 - 仅在豆瓣页面且有演员信息时显示 */}
+          {from === 'douban' && detail?.actors && detail.actors.length > 0 && !detailLoading && (
+            <div className='mt-2 flex items-center justify-center gap-1.5 px-1'>
+              {detail.actors.slice(0, 4).map((actor, index) => (
+                <div
+                  key={actor.id || index}
+                  className='group/actor relative'
+                  title={`${actor.name}${actor.role ? ` (${actor.role})` : ''}`}
+                >
+                  <div className='w-6 h-6 @[140px]:w-7 @[140px]:h-7 rounded-full overflow-hidden ring-1 ring-gray-300 dark:ring-gray-600 transition-all duration-300 group-hover/actor:ring-2 group-hover/actor:ring-green-500 group-hover/actor:scale-110'>
+                    {actor.avatars?.small ? (
+                      <Image
+                        src={processImageUrl(actor.avatars.small)}
+                        alt={actor.name}
+                        width={28}
+                        height={28}
+                        className='w-full h-full object-cover'
+                        unoptimized
+                      />
+                    ) : (
+                      <div className='w-full h-full bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 flex items-center justify-center text-[8px] font-bold text-white'>
+                        {actor.name.charAt(0)}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ))}
+              {detail.actors.length > 4 && (
+                <div className='w-6 h-6 @[140px]:w-7 @[140px]:h-7 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-[9px] font-bold text-gray-600 dark:text-gray-300'>
+                  +{detail.actors.length - 4}
+                </div>
+              )}
+            </div>
+          )}
+
           {config.showSourceName && source_name && (() => {
             // 智能显示source_name：如果有上映状态标记，优先显示状态；否则显示来源
             let displayText = source_name;

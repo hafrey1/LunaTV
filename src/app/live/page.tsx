@@ -927,25 +927,12 @@ function LivePageClient() {
     if (groupIndex === -1) return;
 
     const btn = groupButtonRefs.current[groupIndex];
-    const container = groupContainerRef.current;
-    if (btn && container) {
-      // 手动计算滚动位置，只滚动分组标签容器
-      const containerRect = container.getBoundingClientRect();
-      const btnRect = btn.getBoundingClientRect();
-      const scrollLeft = container.scrollLeft;
-
-      // 计算按钮相对于容器的位置
-      const btnLeft = btnRect.left - containerRect.left + scrollLeft;
-      const btnWidth = btnRect.width;
-      const containerWidth = containerRect.width;
-
-      // 计算目标滚动位置，使按钮居中
-      const targetScrollLeft = btnLeft - (containerWidth - btnWidth) / 2;
-
-      // 平滑滚动到目标位置
-      container.scrollTo({
-        left: targetScrollLeft,
+    if (btn) {
+      // 使用原生 scrollIntoView API 自动滚动到视口中央
+      btn.scrollIntoView({
         behavior: 'smooth',
+        block: 'nearest',
+        inline: 'center',  // 水平居中显示选中的分组
       });
     }
   }, [selectedGroup, groupedChannels]);

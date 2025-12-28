@@ -348,6 +348,19 @@ export async function GET(request: NextRequest) {
       // 清除state cookie
       response.cookies.delete('oidc_state');
 
+      // 异步记录登入时间（不阻塞响应）
+      const loginTime = Date.now();
+      fetch(`${origin}/api/user/my-stats`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Cookie': `user_auth=${cookieValue}`
+        },
+        body: JSON.stringify({ loginTime })
+      }).catch(err => {
+        console.error('OIDC登录记录登入时间失败:', err);
+      });
+
       return response;
     }
 
