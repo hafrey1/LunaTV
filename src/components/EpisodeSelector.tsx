@@ -338,7 +338,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
   return (
     <div className='md:ml-2 px-4 sm:px-4 py-0 h-full rounded-xl bg-black/10 dark:bg-white/5 flex flex-col border border-white/0 dark:border-white/30 overflow-hidden'>
       {/* 主要的 Tab 切换 - 美化版本 */}
-      <div className='flex mb-2 -mx-4 flex-shrink-0 relative'>
+      <div className='flex mb-2 -mx-4 shrink-0 relative'>
         {totalEpisodes > 1 && (
           <div
             onClick={() => setActiveTab('episodes')}
@@ -351,14 +351,14 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
           >
             {/* 激活态背景光晕 */}
             {activeTab === 'episodes' && (
-              <div className='absolute inset-0 bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/20 dark:via-emerald-900/20 dark:to-teal-900/20 -z-10'></div>
+              <div className='absolute inset-0 bg-linear-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/20 dark:via-emerald-900/20 dark:to-teal-900/20 -z-10'></div>
             )}
             {/* 非激活态背景 */}
             {activeTab !== 'episodes' && (
               <div className='absolute inset-0 bg-gray-100/50 dark:bg-gray-800/50 group-hover:bg-gray-100 dark:group-hover:bg-gray-800/70 transition-colors duration-300 -z-10'></div>
             )}
             {/* 悬浮光效 */}
-            <div className='absolute inset-0 bg-gradient-to-r from-transparent via-green-100/0 to-transparent dark:via-green-500/0 group-hover:via-green-100/50 dark:group-hover:via-green-500/10 transition-all duration-300 -z-10'></div>
+            <div className='absolute inset-0 bg-linear-to-r from-transparent via-green-100/0 to-transparent dark:via-green-500/0 group-hover:via-green-100/50 dark:group-hover:via-green-500/10 transition-all duration-300 -z-10'></div>
             <span className='relative z-10 font-bold text-sm sm:text-base'>选集</span>
           </div>
         )}
@@ -373,14 +373,14 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
         >
           {/* 激活态背景光晕 */}
           {activeTab === 'sources' && (
-            <div className='absolute inset-0 bg-gradient-to-r from-blue-50 via-cyan-50 to-sky-50 dark:from-blue-900/20 dark:via-cyan-900/20 dark:to-sky-900/20 -z-10'></div>
+            <div className='absolute inset-0 bg-linear-to-r from-blue-50 via-cyan-50 to-sky-50 dark:from-blue-900/20 dark:via-cyan-900/20 dark:to-sky-900/20 -z-10'></div>
           )}
           {/* 非激活态背景 */}
           {activeTab !== 'sources' && (
             <div className='absolute inset-0 bg-gray-100/50 dark:bg-gray-800/50 group-hover:bg-gray-100 dark:group-hover:bg-gray-800/70 transition-colors duration-300 -z-10'></div>
           )}
           {/* 悬浮光效 */}
-          <div className='absolute inset-0 bg-gradient-to-r from-transparent via-blue-100/0 to-transparent dark:via-blue-500/0 group-hover:via-blue-100/50 dark:group-hover:via-blue-500/10 transition-all duration-300 -z-10'></div>
+          <div className='absolute inset-0 bg-linear-to-r from-transparent via-blue-100/0 to-transparent dark:via-blue-500/0 group-hover:via-blue-100/50 dark:group-hover:via-blue-500/10 transition-all duration-300 -z-10'></div>
           <span className='relative z-10 font-bold text-sm sm:text-base'>换源</span>
         </div>
       </div>
@@ -389,7 +389,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
       {activeTab === 'episodes' && (
         <>
           {/* 分类标签 */}
-          <div className='flex items-center gap-2 sm:gap-4 mb-3 sm:mb-4 border-b border-gray-300 dark:border-gray-700 -mx-4 px-4 flex-shrink-0'>
+          <div className='flex items-center gap-2 sm:gap-4 mb-3 sm:mb-4 border-b border-gray-300 dark:border-gray-700 -mx-4 px-4 shrink-0'>
             <div
               className='flex-1 overflow-x-auto scrollbar-hide'
               ref={categoryContainerRef}
@@ -411,7 +411,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                         buttonRefs.current[idx] = el;
                       }}
                       onClick={() => handleCategoryClick(idx)}
-                      className={`min-w-[64px] sm:min-w-[80px] relative py-2 sm:py-2.5 px-2 sm:px-3 text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap flex-shrink-0 text-center rounded-t-lg active:scale-95
+                      className={`min-w-[64px] sm:min-w-[80px] relative py-2 sm:py-2.5 px-2 sm:px-3 text-xs sm:text-sm font-medium transition-all duration-200 whitespace-nowrap shrink-0 text-center rounded-t-lg active:scale-95
                         ${isActive
                           ? 'text-green-600 dark:text-green-400 bg-green-50 dark:bg-green-900/20'
                           : 'text-gray-700 hover:text-green-600 dark:text-gray-300 dark:hover:text-green-400 hover:bg-gray-50 dark:hover:bg-white/5'
@@ -429,7 +429,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
             </div>
             {/* 向上/向下按钮 */}
             <button
-              className='flex-shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-gray-700 hover:text-green-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-green-400 dark:hover:bg-white/20 transition-all duration-200 hover:scale-105 active:scale-95 transform translate-y-[-4px]'
+              className='shrink-0 w-8 h-8 sm:w-9 sm:h-9 rounded-lg flex items-center justify-center text-gray-700 hover:text-green-600 hover:bg-gray-100 dark:text-gray-300 dark:hover:text-green-400 dark:hover:bg-white/20 transition-all duration-200 hover:scale-105 active:scale-95 transform translate-y-[-4px]'
               onClick={() => {
                 // 切换集数排序（正序/倒序）
                 setDescending((prev) => !prev);
@@ -467,17 +467,17 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                   onClick={() => handleEpisodeClick(episodeNumber - 1)}
                   className={`group min-h-[40px] sm:min-h-[44px] min-w-[40px] sm:min-w-[44px] px-2 sm:px-3 py-2 flex items-center justify-center text-xs sm:text-sm font-semibold rounded-lg transition-all duration-200 whitespace-nowrap font-mono relative overflow-hidden active:scale-95
                     ${isActive
-                      ? 'bg-gradient-to-r from-green-500 via-emerald-500 to-teal-500 text-white shadow-lg shadow-green-500/30 dark:from-green-600 dark:via-emerald-600 dark:to-teal-600 dark:shadow-green-500/20 scale-105'
-                      : 'bg-gradient-to-r from-gray-200 to-gray-100 text-gray-700 hover:from-gray-300 hover:to-gray-200 hover:scale-105 hover:shadow-md dark:from-white/10 dark:to-white/5 dark:text-gray-300 dark:hover:from-white/20 dark:hover:to-white/15'
+                      ? 'bg-linear-to-r from-green-500 via-emerald-500 to-teal-500 text-white shadow-lg shadow-green-500/30 dark:from-green-600 dark:via-emerald-600 dark:to-teal-600 dark:shadow-green-500/20 scale-105'
+                      : 'bg-linear-to-r from-gray-200 to-gray-100 text-gray-700 hover:from-gray-300 hover:to-gray-200 hover:scale-105 hover:shadow-md dark:from-white/10 dark:to-white/5 dark:text-gray-300 dark:hover:from-white/20 dark:hover:to-white/15'
                     }`.trim()}
                 >
                   {/* 激活态光晕效果 */}
                   {isActive && (
-                    <div className='absolute inset-0 bg-gradient-to-r from-green-400 via-emerald-400 to-teal-400 opacity-30 blur'></div>
+                    <div className='absolute inset-0 bg-linear-to-r from-green-400 via-emerald-400 to-teal-400 opacity-30 blur'></div>
                   )}
                   {/* 悬浮态闪光效果 */}
                   {!isActive && (
-                    <div className='absolute inset-0 bg-gradient-to-r from-transparent via-white/0 to-transparent group-hover:via-white/20 dark:group-hover:via-white/10 transition-all duration-300'></div>
+                    <div className='absolute inset-0 bg-linear-to-r from-transparent via-white/0 to-transparent group-hover:via-white/20 dark:group-hover:via-white/10 transition-all duration-300'></div>
                   )}
                   <span className='relative z-10'>
                     {(() => {
@@ -564,8 +564,8 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                         }
                         className={`group flex items-start gap-2 sm:gap-3 px-2 sm:px-3 py-2 sm:py-3 rounded-xl transition-all select-none duration-200 relative overflow-hidden active:scale-[0.98]
                       ${isCurrentSource
-                            ? 'bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/30 dark:via-emerald-900/30 dark:to-teal-900/30 border-2 border-green-500/50 dark:border-green-400/50 shadow-lg shadow-green-500/10'
-                            : 'bg-gradient-to-r from-gray-50 to-gray-100/50 dark:from-white/5 dark:to-white/10 hover:from-blue-50 hover:to-cyan-50 dark:hover:from-blue-900/20 dark:hover:to-cyan-900/20 hover:scale-[1.02] hover:shadow-md cursor-pointer border border-gray-200/50 dark:border-white/10'
+                            ? 'bg-linear-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/30 dark:via-emerald-900/30 dark:to-teal-900/30 border-2 border-green-500/50 dark:border-green-400/50 shadow-lg shadow-green-500/10'
+                            : 'bg-linear-to-r from-gray-50 to-gray-100/50 dark:from-white/5 dark:to-white/10 hover:from-blue-50 hover:to-cyan-50 dark:hover:from-blue-900/20 dark:hover:to-cyan-900/20 hover:scale-[1.02] hover:shadow-md cursor-pointer border border-gray-200/50 dark:border-white/10'
                           }`.trim()}
                       >
                         {/* 当前源标记 */}
@@ -573,7 +573,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                           <div className='absolute top-2 right-2 z-10'>
                             <div className='relative'>
                               <div className='absolute inset-0 bg-green-500 rounded-full blur opacity-60 animate-pulse'></div>
-                              <div className='relative bg-gradient-to-r from-green-500 to-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-semibold shadow-lg'>
+                              <div className='relative bg-linear-to-r from-green-500 to-emerald-500 text-white text-xs px-2 py-0.5 rounded-full font-semibold shadow-lg'>
                                 当前源
                               </div>
                             </div>
@@ -582,11 +582,11 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
                         {/* 悬浮光效 */}
                         {!isCurrentSource && (
-                          <div className='absolute inset-0 bg-gradient-to-r from-transparent via-white/0 to-transparent group-hover:via-white/30 dark:group-hover:via-white/5 transition-all duration-500 pointer-events-none'></div>
+                          <div className='absolute inset-0 bg-linear-to-r from-transparent via-white/0 to-transparent group-hover:via-white/30 dark:group-hover:via-white/5 transition-all duration-500 pointer-events-none'></div>
                         )}
 
                         {/* 封面 */}
-                        <div className='flex-shrink-0 w-10 h-16 sm:w-12 sm:h-20 bg-gradient-to-br from-gray-300 to-gray-200 dark:from-gray-600 dark:to-gray-700 rounded-lg overflow-hidden shadow-sm group-hover:shadow-md transition-all duration-200'>
+                        <div className='shrink-0 w-10 h-16 sm:w-12 sm:h-20 bg-linear-to-br from-gray-300 to-gray-200 dark:from-gray-600 dark:to-gray-700 rounded-lg overflow-hidden shadow-sm group-hover:shadow-md transition-all duration-200'>
                           {source.episodes && source.episodes.length > 0 && (
                             <img
                               src={processImageUrl(source.poster)}
@@ -610,7 +610,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                               </h3>
                               {/* 标题级别的 tooltip - 第一个元素不显示 */}
                               {index !== 0 && (
-                                <div className='absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover/title:opacity-100 group-hover/title:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap z-[500] pointer-events-none'>
+                                <div className='absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-1 bg-gray-800 text-white text-xs rounded-md shadow-lg opacity-0 invisible group-hover/title:opacity-100 group-hover/title:visible transition-all duration-200 ease-out delay-100 whitespace-nowrap z-500 pointer-events-none'>
                                   {source.title}
                                   <div className='absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800'></div>
                                 </div>
@@ -623,7 +623,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                               if (videoInfo && videoInfo.quality !== '未知') {
                                 if (videoInfo.hasError) {
                                   return (
-                                    <div className='bg-gray-500/10 dark:bg-gray-400/20 text-red-600 dark:text-red-400 px-1.5 py-0 rounded text-xs flex-shrink-0 min-w-[50px] text-center'>
+                                    <div className='bg-gray-500/10 dark:bg-gray-400/20 text-red-600 dark:text-red-400 px-1.5 py-0 rounded text-xs shrink-0 min-w-[50px] text-center'>
                                       检测失败
                                     </div>
                                   );
@@ -643,7 +643,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
 
                                   return (
                                     <div
-                                      className={`bg-gray-500/10 dark:bg-gray-400/20 ${textColorClasses} px-1.5 py-0 rounded text-xs flex-shrink-0 min-w-[50px] text-center`}
+                                      className={`bg-gray-500/10 dark:bg-gray-400/20 ${textColorClasses} px-1.5 py-0 rounded text-xs shrink-0 min-w-[50px] text-center`}
                                     >
                                       {videoInfo.quality}
                                     </div>
@@ -698,7 +698,7 @@ const EpisodeSelector: React.FC<EpisodeSelectorProps> = ({
                       </div>
                     );
                   })}
-                <div className='flex-shrink-0 mt-auto pt-2 border-t border-gray-400 dark:border-gray-700'>
+                <div className='shrink-0 mt-auto pt-2 border-t border-gray-400 dark:border-gray-700'>
                   <button
                     onClick={() => {
                       if (videoTitle) {

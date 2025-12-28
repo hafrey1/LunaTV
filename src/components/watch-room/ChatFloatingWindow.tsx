@@ -136,7 +136,7 @@ export default function ChatFloatingWindow() {
   // 悬浮按钮组
   if (!isOpen && !showRoomInfo) {
     return (
-      <div className="fixed bottom-20 right-4 z-[700] flex flex-col gap-2 sm:gap-3 sm:bottom-24 sm:right-6 md:bottom-24">
+      <div className="fixed bottom-20 right-4 z-700 flex flex-col gap-2 sm:gap-3 sm:bottom-24 sm:right-6 md:bottom-24">
         {/* 房间信息按钮 */}
         <button
           onClick={() => setShowRoomInfo(true)}
@@ -168,9 +168,9 @@ export default function ChatFloatingWindow() {
   // 房间信息面板
   if (showRoomInfo) {
     return (
-      <div className="fixed inset-x-4 bottom-20 z-[700] rounded-t-2xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:w-80 sm:rounded-2xl bg-white dark:bg-gray-800 shadow-2xl max-h-[70vh] sm:max-h-[600px] flex flex-col">
+      <div className="fixed inset-x-4 bottom-20 z-700 rounded-t-2xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:w-80 sm:rounded-2xl bg-white dark:bg-gray-800 shadow-2xl max-h-[70vh] sm:max-h-[600px] flex flex-col">
         {/* 头部 - Fixed */}
-        <div className="flex-shrink-0 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4">
+        <div className="shrink-0 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4">
           <div className="flex items-center gap-2">
             <Info className="h-4 w-4 sm:h-5 sm:w-5 text-indigo-500" />
             <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100">房间信息</h3>
@@ -252,13 +252,13 @@ export default function ChatFloatingWindow() {
                   className="flex items-center justify-between bg-gray-50 dark:bg-gray-700 rounded-lg p-2"
                 >
                   <div className="flex items-center gap-2 min-w-0 flex-1">
-                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-gradient-to-r from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs sm:text-sm flex-shrink-0">
+                    <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-linear-to-r from-indigo-400 to-purple-500 flex items-center justify-center text-white font-bold text-xs sm:text-sm shrink-0">
                       {member.name.charAt(0).toUpperCase()}
                     </div>
                     <span className="text-sm sm:text-base font-medium text-gray-900 dark:text-gray-100 truncate">{member.name}</span>
                   </div>
                   {member.isOwner && (
-                    <span className="text-[10px] sm:text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded whitespace-nowrap ml-2 flex-shrink-0">
+                    <span className="text-[10px] sm:text-xs bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-400 px-1.5 sm:px-2 py-0.5 sm:py-1 rounded whitespace-nowrap ml-2 shrink-0">
                       房主
                     </span>
                   )}
@@ -281,9 +281,9 @@ export default function ChatFloatingWindow() {
 
   // 聊天窗口
   return (
-    <div className="fixed inset-x-4 bottom-20 z-[700] flex flex-col rounded-t-2xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:w-80 sm:rounded-2xl bg-white dark:bg-gray-800 shadow-2xl" style={{ height: 'min(500px, 70vh)' }}>
+    <div className="fixed inset-x-4 bottom-20 z-700 flex flex-col rounded-t-2xl sm:inset-x-auto sm:bottom-24 sm:right-6 sm:w-80 sm:rounded-2xl bg-white dark:bg-gray-800 shadow-2xl" style={{ height: 'min(500px, 70vh)' }}>
       {/* 头部 - Fixed */}
-      <div className="flex-shrink-0 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4">
+      <div className="shrink-0 flex items-center justify-between border-b border-gray-200 dark:border-gray-700 p-3 sm:p-4">
         <div className="flex items-center gap-2">
           <MessageCircle className="h-4 w-4 sm:h-5 sm:w-5 text-green-500" />
           <h3 className="text-sm sm:text-base font-semibold text-gray-900 dark:text-gray-100">聊天室</h3>
@@ -329,7 +329,7 @@ export default function ChatFloatingWindow() {
           <div key={msg.id} className="flex flex-col gap-0.5 sm:gap-1">
             <div className="flex items-baseline gap-1.5 sm:gap-2">
               <span className="text-[10px] sm:text-xs font-medium text-indigo-600 dark:text-indigo-400 truncate max-w-[120px] sm:max-w-none">{msg.userName}</span>
-              <span className="text-[10px] sm:text-xs text-gray-400 flex-shrink-0">{formatTime(msg.timestamp)}</span>
+              <span className="text-[10px] sm:text-xs text-gray-400 shrink-0">{formatTime(msg.timestamp)}</span>
             </div>
             <div
               className={`rounded-lg px-2.5 py-1.5 sm:px-3 sm:py-2 ${
@@ -346,7 +346,7 @@ export default function ChatFloatingWindow() {
       </div>
 
       {/* 输入区 - Fixed */}
-      <div className="flex-shrink-0 border-t border-gray-200 dark:border-gray-700 p-2.5 sm:p-4">
+      <div className="shrink-0 border-t border-gray-200 dark:border-gray-700 p-2.5 sm:p-4">
         {showEmojiPicker && (
           <div className="mb-2 sm:mb-3 grid grid-cols-6 gap-1.5 sm:gap-2 rounded-lg bg-gray-50 dark:bg-gray-700 p-1.5 sm:p-2">
             {EMOJI_LIST.map((emoji) => (
@@ -363,7 +363,7 @@ export default function ChatFloatingWindow() {
         <div className="flex gap-1.5 sm:gap-2">
           <button
             onClick={() => setShowEmojiPicker(!showEmojiPicker)}
-            className="rounded-lg p-1.5 sm:p-2 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 transition-all flex-shrink-0"
+            className="rounded-lg p-1.5 sm:p-2 hover:bg-gray-100 dark:hover:bg-gray-700 active:scale-95 transition-all shrink-0"
           >
             <Smile className="h-4 w-4 sm:h-5 sm:w-5 text-gray-500" />
           </button>
@@ -378,7 +378,7 @@ export default function ChatFloatingWindow() {
           <button
             onClick={handleSendMessage}
             disabled={!message.trim()}
-            className="rounded-lg bg-green-500 p-1.5 sm:p-2 text-white hover:bg-green-600 active:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex-shrink-0"
+            className="rounded-lg bg-green-500 p-1.5 sm:p-2 text-white hover:bg-green-600 active:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed shrink-0"
           >
             <Send className="h-4 w-4 sm:h-5 sm:w-5" />
           </button>
