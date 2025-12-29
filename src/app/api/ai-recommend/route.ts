@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getConfig, hasSpecialFeaturePermission } from '@/lib/config';
 import { db } from '@/lib/db';
+import { orchestrateDataSources } from '@/lib/ai-orchestrator';
 
 export const runtime = 'nodejs';
 
@@ -17,6 +18,7 @@ interface ChatRequest {
   temperature?: number;
   max_tokens?: number;
   max_completion_tokens?: number;
+  stream?: boolean; // 🔥 支持流式响应
 }
 
 export async function POST(request: NextRequest) {
@@ -71,7 +73,8 @@ export async function POST(request: NextRequest) {
       }, { status: 500 });
     }
 
-    const { messages, model, temperature, max_tokens, max_completion_tokens } = await request.json() as ChatRequest;
+    const body = await request.json();
+    const { messages, model, temperature, max_tokens, max_completion_tokens, context, stream } = body as ChatRequest & { context?: any };
 
     // 验证请求格式
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -95,20 +98,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(cachedResponse);
     }
 
+    // 获取最后一条用户消息用于分析
+    const userMessage = messages[messages.length - 1]?.content || '';
+
+    // 🔥 使用 Orchestrator 进行意图分析和可选的联网搜索
+    let orchestrationResult;
+
+    if (aiConfig.enableOrchestrator) {
+      console.log('🤖 Orchestrator 已启用，开始意图分析...');
+      orchestrationResult = await orchestrateDataSources(
+        userMessage,
+        context, // 🔥 传入视频上下文（从VideoCard传入）
+        {
+          enableWebSearch: aiConfig.enableWebSearch || false,
+          tavilyApiKeys: aiConfig.tavilyApiKeys,
+        }
+      );
+      console.log('📊 意图分析完成:', {
+        type: orchestrationResult.intent.type,
+        needWebSearch: orchestrationResult.intent.needWebSearch,
+        hasSearchResults: !!orchestrationResult.webSearchResults
+      });
+    }
+
     // 结合当前日期的结构化推荐系统提示词
     const currentDate = new Date().toISOString().split('T')[0];
     const currentYear = new Date().getFullYear();
     const lastYear = currentYear - 1;
     const randomElements = [
       '尝试推荐一些不同类型的作品',
-      '可以包含一些经典和新作品的混合推荐', 
+      '可以包含一些经典和新作品的混合推荐',
       '考虑推荐一些口碑很好的作品',
       '可以推荐一些最近讨论度比较高的作品'
     ];
     const randomHint = randomElements[Math.floor(Math.random() * randomElements.length)];
-    
-    // 获取最后一条用户消息用于分析
-    const userMessage = messages[messages.length - 1]?.content || '';
     
     // 检测用户消息中的YouTube链接
     const detectVideoLinks = (content: string) => {
@@ -150,7 +173,23 @@ export async function POST(request: NextRequest) {
       youtubeSearchStatus = '❌ YouTube搜索功能未启用，无法搜索推荐YouTube视频';
     }
 
-    const systemPrompt = `你是LunaTV的智能推荐助手，支持：${capabilities.join('、')}。当前日期：${currentDate}
+    // 🔥 如果 Orchestrator 启用，使用增强的 systemPrompt（包含video context和可选的搜索结果）
+    let systemPrompt = '';
+
+    if (orchestrationResult) {
+      // 使用 orchestrator 生成的 prompt（包含video context和搜索结果）
+      systemPrompt = orchestrationResult.systemPrompt;
+
+      // 添加 LunaTV 特有的功能说明
+      systemPrompt += `\n## LunaTV 特色功能
+支持：${capabilities.join('、')}
+当前日期：${currentDate}
+
+${youtubeSearchStatus}
+`;
+    } else {
+      // 使用原有的 systemPrompt（兼容旧逻辑）
+      systemPrompt = `你是LunaTV的智能推荐助手，支持：${capabilities.join('、')}。当前日期：${currentDate}
 
 ## 功能状态：
 1. **影视剧推荐** ✅ 始终可用
@@ -191,15 +230,52 @@ ${youtubeEnabled && youtubeConfig.apiKey ? `### YouTube推荐格式：
 - 每次回复尽量提供一些新的角度或不同的推荐
 - 避免推荐过于小众或难以找到的内容
 
-格式限制：
-- 严禁输出任何Markdown格式。
-- "片名"必须是真实存在的影视作品的官方全名。
-- "年份"必须是4位数字的公元年份。
-- "类型"必须是该影片的主要类型，例如：剧情/悬疑/科幻。
-- "简短描述"是对影片的简要介绍。
-- 每一部推荐的影片都必须独占一行，并以《》开始。
+## 回复格式要求：
+- **使用Markdown格式**：标题用##，列表用-，加粗用**
+- **推荐影片格式**：每部影片独占一行，必须以《片名》开始
+  - 格式：《片名》 (年份) [类型] - 简短描述
+  - 示例：《流浪地球2》 (2023) [科幻] - 讲述人类建造行星发动机的宏大故事
+- 片名规则：
+  - 必须是真实存在的影视作品官方全名
+  - 年份必须是4位数字
+  - 每部推荐独占一行，方便点击搜索
+- 使用emoji增强可读性 🎬📺🎭
 
-请始终保持专业和有用的态度，根据用户输入的内容类型提供相应的服务。`;
+请始终保持专业和有用的态度，使用清晰的Markdown格式让内容易读。`;
+
+      // 🔥 添加video context（即使orchestrator未启用）
+      if (context?.title) {
+        systemPrompt += `\n\n## 【当前视频上下文】\n`;
+        systemPrompt += `用户正在浏览: ${context.title}`;
+        if (context.year) systemPrompt += ` (${context.year})`;
+        if (context.currentEpisode) {
+          systemPrompt += `，当前第 ${context.currentEpisode} 集`;
+        }
+        systemPrompt += '\n';
+      }
+    }
+
+    // 🎥 如果检测到YouTube链接，先解析视频信息并加入系统提示词
+    if (hasVideoLinks) {
+      try {
+        console.log('🔍 检测到YouTube链接，开始预解析视频信息...');
+        const parsedVideos = await handleVideoLinkParsing(videoLinks);
+
+        if (parsedVideos.length > 0) {
+          systemPrompt += `\n\n## 【用户发送的YouTube视频信息】\n`;
+          parsedVideos.forEach((video, index) => {
+            systemPrompt += `\n视频 ${index + 1}:\n`;
+            systemPrompt += `- 标题: ${video.title}\n`;
+            systemPrompt += `- 频道: ${video.channelName}\n`;
+            systemPrompt += `- 链接: ${video.originalUrl}\n`;
+          });
+          systemPrompt += `\n**重要**: 请根据上述真实的视频标题和频道信息回复用户，不要猜测或编造视频内容。\n`;
+          console.log(`✅ 已将 ${parsedVideos.length} 个视频信息加入系统提示词`);
+        }
+      } catch (error) {
+        console.error('预解析YouTube视频失败:', error);
+      }
+    }
 
     // 准备发送给OpenAI的消息
     const chatMessages: OpenAIMessage[] = [
@@ -242,21 +318,22 @@ ${youtubeEnabled && youtubeConfig.apiKey ? `### YouTube推荐格式：
     const requestBody: any = {
       model: requestModel,
       messages: chatMessages,
+      stream: stream || false, // 🔥 添加流式参数
     };
-    
+
     // 推理模型不支持某些参数
     if (!useMaxCompletionTokens) {
       requestBody.temperature = temperature ?? aiConfig.temperature;
     }
-    
+
     // 根据模型类型使用正确的token限制参数
     if (useMaxCompletionTokens) {
       requestBody.max_completion_tokens = tokenLimit;
       // 推理模型不支持这些参数
-      console.log(`使用推理模型 ${requestModel}，max_completion_tokens: ${tokenLimit}`);
+      console.log(`使用推理模型 ${requestModel}，max_completion_tokens: ${tokenLimit}，stream: ${stream}`);
     } else {
       requestBody.max_tokens = tokenLimit;
-      console.log(`使用标准模型 ${requestModel}，max_tokens: ${tokenLimit}`);
+      console.log(`使用标准模型 ${requestModel}，max_tokens: ${tokenLimit}，stream: ${stream}`);
     }
 
     // 调用AI API
@@ -274,11 +351,11 @@ ${youtubeEnabled && youtubeConfig.apiKey ? `### YouTube推荐格式：
     if (!openaiResponse.ok) {
       const errorData = await openaiResponse.text();
       console.error('OpenAI API Error:', errorData);
-      
+
       // 提供更详细的错误信息
       let errorMessage = 'AI服务暂时不可用，请稍后重试';
       let errorDetails = '';
-      
+
       try {
         const parsedError = JSON.parse(errorData);
         if (parsedError.error?.message) {
@@ -287,7 +364,7 @@ ${youtubeEnabled && youtubeConfig.apiKey ? `### YouTube推荐格式：
       } catch {
         errorDetails = errorData.substring(0, 200); // 限制错误信息长度
       }
-      
+
       // 根据HTTP状态码提供更具体的错误信息
       if (openaiResponse.status === 401) {
         errorMessage = 'API密钥无效，请联系管理员检查配置';
@@ -298,14 +375,109 @@ ${youtubeEnabled && youtubeConfig.apiKey ? `### YouTube推荐格式：
       } else if (openaiResponse.status >= 500) {
         errorMessage = 'AI服务器错误，请稍后重试';
       }
-      
-      return NextResponse.json({ 
+
+      return NextResponse.json({
         error: errorMessage,
         details: errorDetails,
         status: openaiResponse.status
       }, { status: 500 });
     }
 
+    // 🔥 流式响应处理
+    if (stream) {
+      console.log('📡 返回SSE流式响应');
+
+      // 累积完整内容用于后处理
+      let fullContent = '';
+
+      // 创建转换流处理OpenAI的SSE格式
+      const transformStream = new TransformStream({
+        async transform(chunk, controller) {
+          const text = new TextDecoder().decode(chunk);
+          const lines = text.split('\n').filter(line => line.trim() !== '');
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              const data = line.slice(6);
+
+              if (data === '[DONE]') {
+                // 流式结束，处理YouTube功能
+                console.log('📡 流式响应完成，处理YouTube相关功能');
+
+                try {
+                  // 检测YouTube推荐
+                  const isYouTubeRecommendation = youtubeEnabled && youtubeConfig.apiKey &&
+                    fullContent.includes('【') && fullContent.includes('】');
+
+                  if (isYouTubeRecommendation) {
+                    const searchKeywords = extractYouTubeSearchKeywords(fullContent);
+                    const youtubeVideos = await searchYouTubeVideos(searchKeywords, youtubeConfig);
+
+                    if (youtubeVideos.length > 0) {
+                      // 发送YouTube数据
+                      controller.enqueue(
+                        new TextEncoder().encode(`data: ${JSON.stringify({
+                          youtubeVideos,
+                          type: 'youtube_data'
+                        })}\n\n`)
+                      );
+                    }
+                  }
+
+                  // 检测视频链接解析
+                  if (hasVideoLinks) {
+                    const parsedVideos = await handleVideoLinkParsing(videoLinks);
+                    if (parsedVideos.length > 0) {
+                      // 发送视频链接数据
+                      controller.enqueue(
+                        new TextEncoder().encode(`data: ${JSON.stringify({
+                          videoLinks: parsedVideos,
+                          type: 'video_links'
+                        })}\n\n`)
+                      );
+                    }
+                  }
+                } catch (error) {
+                  console.error('流式后处理失败:', error);
+                }
+
+                controller.enqueue(new TextEncoder().encode('data: [DONE]\n\n'));
+                continue;
+              }
+
+              try {
+                const json = JSON.parse(data);
+                const content = json.choices?.[0]?.delta?.content || '';
+
+                if (content) {
+                  // 累积内容
+                  fullContent += content;
+
+                  // 转换为统一的SSE格式
+                  controller.enqueue(
+                    new TextEncoder().encode(`data: ${JSON.stringify({ text: content })}\n\n`)
+                  );
+                }
+              } catch (e) {
+                // 忽略解析错误，继续处理下一行
+              }
+            }
+          }
+        }
+      });
+
+      const readableStream = openaiResponse.body!.pipeThrough(transformStream);
+
+      return new NextResponse(readableStream, {
+        headers: {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-cache',
+          'Connection': 'keep-alive',
+        },
+      });
+    }
+
+    // 非流式响应（保持原有逻辑）
     const aiResult = await openaiResponse.json();
     
     // 检查AI响应的完整性

@@ -5,6 +5,8 @@
 import { Brain, Send, Sparkles, X, Play, ExternalLink } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useRef, useState, useOptimistic, useTransition, useMemo, useCallback, memo } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
 
 import {
   addMovieTitleClickListeners,
@@ -17,10 +19,13 @@ import {
   sendAIRecommendMessage,
   MovieRecommendation,
 } from '@/lib/ai-recommend.client';
+import { VideoContext } from '@/lib/ai-orchestrator';
 
 interface AIRecommendModalProps {
   isOpen: boolean;
   onClose: () => void;
+  context?: VideoContext; // 视频上下文（从VideoCard传入）
+  welcomeMessage?: string; // 自定义欢迎消息
 }
 
 interface ExtendedAIMessage extends AIMessage {
@@ -52,14 +57,6 @@ const MessageItem = memo(({
   playingVideoId,
   setPlayingVideoId
 }: MessageItemProps) => {
-  // 使用 useMemo 缓存格式化后的消息内容
-  const formattedContent = useMemo(() => {
-    if (message.role === 'assistant') {
-      return formatAIResponseWithLinks(message.content, handleTitleClick);
-    }
-    return null;
-  }, [message.content, message.role, handleTitleClick]);
-
   return (
     <div
       className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'} animate-in fade-in slide-in-from-bottom-2 duration-300`}
@@ -72,10 +69,102 @@ const MessageItem = memo(({
         } ${message.content === '思考中...' ? 'opacity-70 animate-pulse' : ''}`}
       >
         {message.role === 'assistant' ? (
-          <div
-            dangerouslySetInnerHTML={{ __html: formattedContent || '' }}
-            className="prose prose-sm dark:prose-invert max-w-none"
-          />
+          <div className="prose prose-sm dark:prose-invert max-w-none prose-p:my-2 prose-p:leading-relaxed prose-pre:bg-gray-800 prose-pre:text-gray-100 dark:prose-pre:bg-gray-900 prose-code:text-purple-600 dark:prose-code:text-purple-400 prose-code:bg-purple-50 dark:prose-code:bg-purple-900/20 prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-code:before:content-none prose-code:after:content-none prose-a:text-blue-600 dark:prose-a:text-blue-400 prose-strong:text-gray-900 dark:prose-strong:text-white prose-ul:my-2 prose-ol:my-2 prose-li:my-1">
+            <ReactMarkdown
+              remarkPlugins={[remarkGfm]}
+              components={{
+                // 自定义文本渲染，将《片名》转换为可点击链接
+                p: ({node, children, ...props}) => {
+                  const processChildren = (child: any): any => {
+                    if (typeof child === 'string') {
+                      // 匹配《片名》格式并转换为可点击的span
+                      const parts = child.split(/(《[^》]+》)/g);
+                      return parts.map((part, i) => {
+                        const match = part.match(/《([^》]+)》/);
+                        if (match) {
+                          const title = match[1];
+                          return (
+                            <span
+                              key={i}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTitleClick(title);
+                              }}
+                              className="text-blue-600 dark:text-blue-400 font-medium cursor-pointer hover:underline"
+                            >
+                              {part}
+                            </span>
+                          );
+                        }
+                        return part;
+                      });
+                    }
+                    return child;
+                  };
+
+                  return (
+                    <p {...props}>
+                      {Array.isArray(children)
+                        ? children.map(child => processChildren(child))
+                        : processChildren(children)
+                      }
+                    </p>
+                  );
+                },
+                // 自定义列表项渲染，将《片名》转换为可点击链接
+                li: ({node, children, ...props}) => {
+                  const processChildren = (child: any): any => {
+                    if (typeof child === 'string') {
+                      // 匹配《片名》格式并转换为可点击的span
+                      const parts = child.split(/(《[^》]+》)/g);
+                      return parts.map((part, i) => {
+                        const match = part.match(/《([^》]+)》/);
+                        if (match) {
+                          const title = match[1];
+                          return (
+                            <span
+                              key={i}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleTitleClick(title);
+                              }}
+                              className="text-blue-600 dark:text-blue-400 font-medium cursor-pointer hover:underline"
+                            >
+                              {part}
+                            </span>
+                          );
+                        }
+                        return part;
+                      });
+                    } else if (child?.props?.children) {
+                      // 递归处理嵌套子元素
+                      return {
+                        ...child,
+                        props: {
+                          ...child.props,
+                          children: Array.isArray(child.props.children)
+                            ? child.props.children.map(processChildren)
+                            : processChildren(child.props.children)
+                        }
+                      };
+                    }
+                    return child;
+                  };
+
+                  return (
+                    <li {...props}>
+                      {Array.isArray(children)
+                        ? children.map(child => processChildren(child))
+                        : processChildren(children)
+                      }
+                    </li>
+                  );
+                }
+              }}
+            >
+              {message.content}
+            </ReactMarkdown>
+          </div>
         ) : (
           <div className="whitespace-pre-wrap">{message.content}</div>
         )}
@@ -297,7 +386,7 @@ const MessageItem = memo(({
 
 MessageItem.displayName = 'MessageItem';
 
-export default function AIRecommendModal({ isOpen, onClose }: AIRecommendModalProps) {
+export default function AIRecommendModal({ isOpen, onClose, context, welcomeMessage }: AIRecommendModalProps) {
   const router = useRouter();
   const [messages, setMessages] = useState<ExtendedAIMessage[]>([]);
   const [inputMessage, setInputMessage] = useState('');
@@ -415,27 +504,44 @@ export default function AIRecommendModal({ isOpen, onClose }: AIRecommendModalPr
       if (cachedMessages) {
         const { messages: storedMessages, timestamp } = JSON.parse(cachedMessages);
         const now = new Date().getTime();
-        // 30分钟缓存
-        if (now - timestamp < 30 * 60 * 1000) {
+
+        // 检查缓存是否包含旧格式的欢迎消息（不包含Markdown列表标记）
+        const hasOldFormatWelcome = storedMessages.length > 0 &&
+          storedMessages[0].role === 'assistant' &&
+          storedMessages[0].content.includes('🎬 影视剧推荐 - 推荐电影') &&
+          !storedMessages[0].content.includes('- 🎬');
+
+        // 30分钟缓存，但如果是旧格式则强制刷新
+        if (now - timestamp < 30 * 60 * 1000 && !hasOldFormatWelcome) {
           setMessages(storedMessages.map((msg: ExtendedAIMessage) => ({
             ...msg,
             timestamp: msg.timestamp || new Date().toISOString()
           })));
           return; // 有缓存就不显示欢迎消息
         } else {
-          // 🔥 修复Bug #2: 超过30分钟时真正删除localStorage中的过期数据
-          console.log('AI聊天记录已超过30分钟，自动清除缓存');
+          // 超过30分钟或旧格式时删除缓存
+          console.log(hasOldFormatWelcome ? 'AI欢迎消息格式已更新，清除旧缓存' : 'AI聊天记录已超过30分钟，自动清除缓存');
           localStorage.removeItem('ai-recommend-messages');
         }
       }
 
-      // 没有有效缓存时显示欢迎消息
-      const welcomeMessage: ExtendedAIMessage = {
+      // 没有有效缓存时显示欢迎消息（Markdown格式）
+      const defaultWelcome = context?.title
+        ? `想了解《${context.title}》的更多信息吗？我可以帮你查询剧情、演员、评价等。`
+        : `你好！我是 **AI 智能助手**，支持以下功能：
+
+- 🎬 **影视剧推荐** - 推荐电影、电视剧、动漫等
+- 🔗 **视频链接解析** - 解析 YouTube 链接并播放
+- 📺 **视频内容搜索** - 搜索相关视频内容
+
+💡 **提示**：直接告诉我你想看什么类型的内容，或发送 YouTube 链接给我解析！`;
+
+      const welcomeMsg: ExtendedAIMessage = {
         role: 'assistant',
-        content: '你好！我是AI智能助手，支持以下功能：\n\n🎬 影视剧推荐 - 推荐电影、电视剧、动漫等\n🔗 视频链接解析 - 解析YouTube链接并播放\n📺 视频内容搜索 - 搜索相关视频内容\n\n💡 直接告诉我你想看什么类型的内容，或发送YouTube链接给我解析！',
+        content: welcomeMessage || defaultWelcome,
         timestamp: new Date().toISOString()
       };
-      setMessages([welcomeMessage]);
+      setMessages([welcomeMsg]);
     } catch (error) {
       console.error("Failed to load messages from cache", error);
       // 发生错误时也清除可能损坏的缓存
@@ -505,12 +611,104 @@ export default function AIRecommendModal({ isOpen, onClose }: AIRecommendModalPr
         // 智能上下文管理：只发送最近8条消息（4轮对话）
         const conversationHistory = updatedMessages.slice(-8);
 
-        const response = await sendAIRecommendMessage(conversationHistory);
+        // 🔥 流式响应：逐字显示AI回复
+        let streamingContent = '';
+        const response = await sendAIRecommendMessage(
+          conversationHistory,
+          context,
+          (chunk: string) => {
+            // 每次接收到chunk，更新消息内容
+            streamingContent += chunk;
+            setMessages((prev) => {
+              const newMessages = [...prev];
+              // 更新最后一条助手消息（"思考中..."）
+              if (newMessages[newMessages.length - 1]?.role === 'assistant') {
+                newMessages[newMessages.length - 1] = {
+                  ...newMessages[newMessages.length - 1],
+                  content: streamingContent,
+                };
+              }
+              return newMessages;
+            });
+          }
+        );
+
+        // 从AI回复中提取推荐影片（用于流式响应）
+        const extractRecommendations = (content: string): MovieRecommendation[] => {
+          const recommendations: MovieRecommendation[] = [];
+          const lines = content.split('\n');
+
+          // 支持多种格式：
+          // 1. 《片名》（2023） - 带中文括号年份
+          // 2. 《片名》 - 不带年份
+          // 3. 1. 类型：《片名》(English Title) - 带类别前缀和英文名
+          // 4. 1. 《片名》 - 数字序号
+
+          // 匹配《》中的内容，允许前面有任意文本（类别、序号等）
+          const titlePattern = /《([^》]+)》/;
+
+          for (let i = 0; i < lines.length; i++) {
+            if (recommendations.length >= 4) break;
+
+            const line = lines[i];
+            const match = line.match(titlePattern);
+
+            if (match) {
+              const title = match[1].trim();
+              let year = '';
+              let genre = '';
+              let description = 'AI推荐内容';
+
+              // 尝试从同一行提取年份（中文括号优先）
+              const yearMatchCN = line.match(/《[^》]+》\s*（(\d{4})）/);
+              const yearMatchEN = line.match(/《[^》]+》\s*\((\d{4})\)/);
+
+              if (yearMatchCN) {
+                year = yearMatchCN[1];
+              } else if (yearMatchEN) {
+                year = yearMatchEN[1];
+              }
+
+              // 尝试从同一行提取类型（在《》之前的部分）
+              const genreMatch = line.match(/(?:\d+\.\s*)?([^：:《]+)[：:]\s*《/);
+              if (genreMatch) {
+                genre = genreMatch[1].trim();
+              }
+
+              // 查找后续行的"类型："或"推荐理由："
+              for (let j = i + 1; j < Math.min(i + 5, lines.length); j++) {
+                const nextLine = lines[j];
+                if (nextLine.includes('类型：') || nextLine.includes('类型:')) {
+                  const extractedGenre = nextLine.split(/类型[：:]/)[1]?.trim();
+                  if (extractedGenre && !genre) {
+                    genre = extractedGenre;
+                  }
+                } else if (nextLine.includes('推荐理由：') || nextLine.includes('推荐理由:') || nextLine.includes('理由：') || nextLine.includes('理由:')) {
+                  description = nextLine.split(/(?:推荐)?理由[：:]/)[1]?.trim() || description;
+                  break;
+                }
+              }
+
+              recommendations.push({
+                title,
+                year,
+                genre,
+                description,
+              });
+            }
+          }
+          return recommendations;
+        };
+
+        // 使用最终内容（streamingContent优先，因为它包含完整的流式内容）
+        const finalContent = streamingContent || response.choices[0].message.content;
+        const extractedRecommendations = extractRecommendations(finalContent);
+
         const assistantMessage: ExtendedAIMessage = {
           role: 'assistant',
-          content: response.choices[0].message.content,
+          content: finalContent,
           timestamp: new Date().toISOString(),
-          recommendations: response.recommendations || [],
+          recommendations: response.recommendations || extractedRecommendations,
           youtubeVideos: response.youtubeVideos || [],
           videoLinks: response.videoLinks || [],
           type: response.type || 'normal',

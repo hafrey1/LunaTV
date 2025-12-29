@@ -118,6 +118,9 @@ export const UserMenu: React.FC = () => {
   const [enableAutoSkip, setEnableAutoSkip] = useState(true);
   const [enableAutoNextEpisode, setEnableAutoNextEpisode] = useState(true);
 
+  // 清空继续观看确认设置（默认关闭，需要的用户可以开启）
+  const [requireClearConfirmation, setRequireClearConfirmation] = useState(false);
+
   // 下载相关设置
   const [downloadFormat, setDownloadFormat] = useState<'TS' | 'MP4'>('TS');
 
@@ -314,6 +317,12 @@ export const UserMenu: React.FC = () => {
       const savedEnableAutoNextEpisode = localStorage.getItem('enableAutoNextEpisode');
       if (savedEnableAutoNextEpisode !== null) {
         setEnableAutoNextEpisode(JSON.parse(savedEnableAutoNextEpisode));
+      }
+
+      // 读取清空继续观看确认设置（默认关闭）
+      const savedRequireClearConfirmation = localStorage.getItem('requireClearConfirmation');
+      if (savedRequireClearConfirmation !== null) {
+        setRequireClearConfirmation(JSON.parse(savedRequireClearConfirmation));
       }
 
       // 读取下载格式设置
@@ -855,6 +864,13 @@ export const UserMenu: React.FC = () => {
     }
   };
 
+  const handleRequireClearConfirmationToggle = (value: boolean) => {
+    setRequireClearConfirmation(value);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('requireClearConfirmation', JSON.stringify(value));
+    }
+  };
+
   const handleDoubanDataSourceChange = (value: string) => {
     setDoubanDataSource(value);
     if (typeof window !== 'undefined') {
@@ -944,6 +960,7 @@ export const UserMenu: React.FC = () => {
       localStorage.setItem('enableContinueWatchingFilter', JSON.stringify(false));
       localStorage.setItem('enableAutoSkip', JSON.stringify(true));
       localStorage.setItem('enableAutoNextEpisode', JSON.stringify(true));
+      localStorage.setItem('requireClearConfirmation', JSON.stringify(false));
       localStorage.setItem('playerBufferMode', 'standard');
       localStorage.setItem('downloadFormat', 'TS');
     }
@@ -1736,6 +1753,30 @@ export const UserMenu: React.FC = () => {
                 </label>
               </div>
 
+              {/* 清空继续观看确认开关 */}
+              <div className='flex items-center justify-between'>
+                <div>
+                  <h5 className='text-sm font-medium text-gray-700 dark:text-gray-300'>
+                    清空记录确认提示
+                  </h5>
+                  <p className='text-xs text-gray-500 dark:text-gray-400 mt-1'>
+                    开启后点击清空按钮时会弹出确认对话框，防止误操作
+                  </p>
+                </div>
+                <label className='flex items-center cursor-pointer'>
+                  <div className='relative'>
+                    <input
+                      type='checkbox'
+                      className='sr-only peer'
+                      checked={requireClearConfirmation}
+                      onChange={(e) => handleRequireClearConfirmationToggle(e.target.checked)}
+                    />
+                    <div className='w-11 h-6 bg-gray-300 rounded-full peer-checked:bg-green-500 transition-colors dark:bg-gray-600'></div>
+                    <div className='absolute top-0.5 left-0.5 w-5 h-5 bg-white rounded-full transition-transform peer-checked:translate-x-5'></div>
+                  </div>
+                </label>
+              </div>
+
               {/* 提示信息 */}
               <div className='text-xs text-gray-500 dark:text-gray-400 bg-blue-50 dark:bg-blue-900/20 p-3 rounded-lg border border-blue-200 dark:border-blue-800'>
                 💡 这些设置会作为新视频的默认配置。对于已配置的视频，请在播放页面的"跳过设置"中单独调整。
@@ -2151,9 +2192,9 @@ export const UserMenu: React.FC = () => {
                             from="playrecord"
                           />
                         </div>
-                        {/* 新集数徽章 */}
-                        <div className='absolute -top-2 -right-2 bg-linear-to-r from-red-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full shadow-lg z-10'>
-                          +{series.newEpisodes}集
+                        {/* 新集数徽章 - Netflix 统一风格 */}
+                        <div className='absolute -top-2 -right-2 bg-red-600 text-white text-xs px-2 py-0.5 rounded-md shadow-lg animate-pulse z-10 font-bold'>
+                          +{series.newEpisodes}
                         </div>
                       </div>
                     ))}
@@ -2235,10 +2276,10 @@ export const UserMenu: React.FC = () => {
                       remarks={record.remarks}
                     />
                   </div>
-                  {/* 新集数徽章 */}
+                  {/* 新集数徽章 - Netflix 统一风格 */}
                   {newEpisodesCount > 0 && (
-                    <div className='absolute -top-2 -right-2 bg-linear-to-r from-red-500 to-pink-500 text-white text-xs px-2 py-1 rounded-full shadow-lg z-10'>
-                      +{newEpisodesCount}集
+                    <div className='absolute -top-2 -right-2 bg-red-600 text-white text-xs px-2 py-0.5 rounded-md shadow-lg animate-pulse z-10 font-bold'>
+                      +{newEpisodesCount}
                     </div>
                   )}
                   {/* 进度指示器 */}
@@ -2372,13 +2413,10 @@ export const UserMenu: React.FC = () => {
                     releaseDate={favorite.releaseDate}
                   />
                   {/* 收藏心形图标 - 隐藏，使用VideoCard内部的hover爱心 */}
-                  {/* 新上映高亮标记 - 7天内上映的显示 */}
+                  {/* 新上映高亮标记 - Netflix 统一风格 - 7天内上映的显示 */}
                   {isNewRelease && (
-                    <div className='absolute top-2 left-2 bg-linear-to-r from-yellow-400 via-orange-500 to-red-500 text-white text-xs font-bold px-3 py-1.5 rounded-full shadow-lg ring-2 ring-white/50 animate-pulse z-40'>
-                      <span className='flex items-center gap-1'>
-                        <span className='text-[10px]'>🎉</span>
-                        新上映
-                      </span>
+                    <div className='absolute top-2 left-2 bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-md shadow-lg animate-pulse z-40'>
+                      新上映
                     </div>
                   )}
                 </div>
