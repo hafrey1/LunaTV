@@ -67,6 +67,14 @@ function PlayPageClient() {
   const [error, setError] = useState<string | null>(null);
   const [detail, setDetail] = useState<SearchResult | null>(null);
 
+  // 测速进度状态
+  const [speedTestProgress, setSpeedTestProgress] = useState<{
+    current: number;
+    total: number;
+    currentSource: string;
+    result?: string;
+  } | null>(null);
+
   // 收藏状态
   const [favorited, setFavorited] = useState(false);
 
@@ -248,6 +256,41 @@ function PlayPageClient() {
       setCurrentEpisodeIndex(newIndex);
     }
   }, [searchParams]);
+
+  // 重新加载触发器（用于触发 initAll 重新执行）
+  const [reloadTrigger, setReloadTrigger] = useState(0);
+  const reloadFlagRef = useRef<string | null>(null);
+
+  // 监听 URL source/id 参数变化（观影室切换源同步）
+  useEffect(() => {
+    const newSource = searchParams.get('source') || '';
+    const newId = searchParams.get('id') || '';
+    const newIndex = parseInt(searchParams.get('index') || '0');
+    const newTime = parseInt(searchParams.get('t') || '0');
+    const reloadFlag = searchParams.get('_reload');
+
+    // 如果 source 或 id 变化，且有 _reload 标记，且不是已经处理过的reload
+    if (reloadFlag && reloadFlag !== reloadFlagRef.current && (newSource !== currentSource || newId !== currentId)) {
+      console.log('[PlayPage] URL source/id changed with reload flag, reloading:', { newSource, newId, newIndex, newTime });
+
+      // 标记此reload已处理
+      reloadFlagRef.current = reloadFlag;
+
+      // 重置所有相关状态（但保留 detail，让 initAll 重新加载后再更新）
+      setCurrentSource(newSource);
+      setCurrentId(newId);
+      setCurrentEpisodeIndex(newIndex);
+      // 不清空 detail，避免触发 videoUrl 清空导致黑屏
+      // setDetail(null);
+      setError(null);
+      setLoading(true);
+      setNeedPrefer(false);
+      setPlayerReady(false);
+
+      // 触发重新加载（通过更新 reloadTrigger 来触发 initAll 重新执行）
+      setReloadTrigger(prev => prev + 1);
+    }
+  }, [searchParams, currentSource, currentId]);
 
   // 换源相关状态
   const [availableSources, setAvailableSources] = useState<SearchResult[]>([]);
@@ -623,6 +666,10 @@ function PlayPageClient() {
     pendingOwnerChange,
     confirmFollowOwner,
     rejectFollowOwner,
+    showSourceSwitchDialog,
+    pendingOwnerState,
+    handleConfirmSourceSwitch,
+    handleCancelSourceSwitch,
   } = useWatchRoomSync({
     watchRoom,
     artPlayerRef,
@@ -631,8 +678,9 @@ function PlayPageClient() {
     playerReady,
     videoId: currentId,  // 传入URL参数的id
     currentSource: currentSource,  // 传入当前播放源
-    videoTitle: detail?.title || '',  // 传入视频标题
-    videoYear: detail?.year || '',  // 传入视频年份
+    videoTitle: videoTitle,  // 传入视频标题（来自 state，初始值来自 URL）
+    videoYear: videoYear,  // 传入视频年份（来自 state，初始值来自 URL）
+    videoDoubanId: videoDoubanId,  // 传入豆瓣ID
     searchTitle: searchTitle,  // 传入搜索标题
     setCurrentEpisodeIndex,  // 传入切换集数的函数
   });
@@ -1167,19 +1215,36 @@ function PlayPageClient() {
   // 完整测速（桌面设备）
   const fullSpeedTest = async (sources: SearchResult[]): Promise<SearchResult> => {
     // 桌面设备使用小批量并发，避免创建过多实例
-    const concurrency = 2;
+    const concurrency = 3;
+    // 限制最大测试数量为20个源（平衡速度和覆盖率）
+    const maxTestCount = 20;
+    const sourcesToTest = sources.slice(0, maxTestCount);
+
+    console.log(`开始测速: 共${sources.length}个源，将测试前${sourcesToTest.length}个`);
+
     const allResults: Array<{
       source: SearchResult;
       testResult: { quality: string; loadSpeed: string; pingTime: number };
     } | null> = [];
 
-    for (let i = 0; i < sources.length; i += concurrency) {
-      const batch = sources.slice(i, i + concurrency);
-      console.log(`测速批次 ${Math.floor(i/concurrency) + 1}/${Math.ceil(sources.length/concurrency)}: ${batch.length} 个源`);
-      
+    let shouldStop = false; // 早停标志
+    let testedCount = 0; // 已测试数量
+
+    for (let i = 0; i < sourcesToTest.length && !shouldStop; i += concurrency) {
+      const batch = sourcesToTest.slice(i, i + concurrency);
+      console.log(`测速批次 ${Math.floor(i/concurrency) + 1}/${Math.ceil(sourcesToTest.length/concurrency)}: ${batch.length} 个源`);
+
       const batchResults = await Promise.all(
-        batch.map(async (source) => {
+        batch.map(async (source, batchIndex) => {
           try {
+            // 更新进度：显示当前正在测试的源
+            const currentIndex = i + batchIndex + 1;
+            setSpeedTestProgress({
+              current: currentIndex,
+              total: sourcesToTest.length,
+              currentSource: source.source_name,
+            });
+
             if (!source.episodes || source.episodes.length === 0) {
               return null;
             }
@@ -1187,21 +1252,63 @@ function PlayPageClient() {
             const episodeUrl = source.episodes.length > 1
               ? source.episodes[1]
               : source.episodes[0];
-            
+
             const testResult = await getVideoResolutionFromM3u8(episodeUrl);
+
+            // 更新进度：显示测试结果
+            setSpeedTestProgress({
+              current: currentIndex,
+              total: sourcesToTest.length,
+              currentSource: source.source_name,
+              result: `${testResult.quality} | ${testResult.loadSpeed} | ${testResult.pingTime}ms`,
+            });
+
             return { source, testResult };
           } catch (error) {
             console.warn(`测速失败: ${source.source_name}`, error);
+
+            // 更新进度：显示失败
+            const currentIndex = i + batchIndex + 1;
+            setSpeedTestProgress({
+              current: currentIndex,
+              total: sourcesToTest.length,
+              currentSource: source.source_name,
+              result: '测速失败',
+            });
+
             return null;
           }
         })
       );
-      
+
       allResults.push(...batchResults);
-      
-      // 批次间延迟，让资源有时间清理
-      if (i + concurrency < sources.length) {
-        await new Promise(resolve => setTimeout(resolve, 500));
+      testedCount += batch.length;
+
+      // 🎯 保守策略早停判断：找到高质量源
+      const successfulInBatch = batchResults.filter(Boolean) as Array<{
+        source: SearchResult;
+        testResult: { quality: string; loadSpeed: string; pingTime: number };
+      }>;
+
+      for (const result of successfulInBatch) {
+        const { quality, loadSpeed } = result.testResult;
+        const speedMatch = loadSpeed.match(/^([\d.]+)\s*MB\/s$/);
+        const speedMBps = speedMatch ? parseFloat(speedMatch[1]) : 0;
+
+        // 🛑 保守策略：只有非常优质的源才早停
+        const is4KHighSpeed = quality === '4K' && speedMBps >= 8;
+        const is2KHighSpeed = quality === '2K' && speedMBps >= 6;
+
+        if (is4KHighSpeed || is2KHighSpeed) {
+          console.log(`✓ 找到顶级优质源: ${result.source.source_name} (${quality}, ${loadSpeed})，停止测速`);
+          shouldStop = true;
+          break;
+        }
+      }
+
+      // 批次间延迟，让资源有时间清理（减少延迟时间）
+      if (i + concurrency < sourcesToTest.length && !shouldStop) {
+        await new Promise(resolve => setTimeout(resolve, 200));
       }
     }
 
@@ -1286,6 +1393,9 @@ function PlayPageClient() {
         }, ${result.testResult.pingTime}ms)`
       );
     });
+
+    // 清除测速进度状态
+    setSpeedTestProgress(null);
 
     return resultsWithScore[0].source;
   };
@@ -2597,7 +2707,7 @@ function PlayPageClient() {
     };
 
     initAll();
-  }, []);
+  }, [reloadTrigger]); // 添加 reloadTrigger 作为依赖，当它变化时重新执行 initAll
 
   // 播放记录处理
   useEffect(() => {
@@ -2716,22 +2826,31 @@ function PlayPageClient() {
         return;
       }
 
-      // 尝试跳转到当前正在播放的集数
+      // 🔥 换源时保持当前集数不变（除非新源集数不够）
       let targetIndex = currentEpisodeIndex;
 
-      // 如果当前集数超出新源的范围，则跳转到第一集
-      if (!newDetail.episodes || targetIndex >= newDetail.episodes.length) {
-        targetIndex = 0;
+      // 只有当新源的集数不够时才调整到最后一集或第一集
+      if (newDetail.episodes && newDetail.episodes.length > 0) {
+        if (targetIndex >= newDetail.episodes.length) {
+          // 当前集数超出新源范围，跳转到新源的最后一集
+          targetIndex = newDetail.episodes.length - 1;
+          console.log(`⚠️ 当前集数(${currentEpisodeIndex})超出新源范围(${newDetail.episodes.length}集)，跳转到第${targetIndex + 1}集`);
+        } else {
+          // 集数在范围内，保持不变
+          console.log(`✅ 换源保持当前集数: 第${targetIndex + 1}集`);
+        }
       }
 
       // 如果仍然是同一集数且播放进度有效，则在播放器就绪后恢复到原始进度
       if (targetIndex !== currentEpisodeIndex) {
         resumeTimeRef.current = 0;
+        console.log(`🔄 换源后集数变化: ${currentEpisodeIndex + 1} -> ${targetIndex + 1}，重置播放进度`);
       } else if (
         (!resumeTimeRef.current || resumeTimeRef.current === 0) &&
         currentPlayTime > 1
       ) {
         resumeTimeRef.current = currentPlayTime;
+        console.log(`💾 换源保持播放进度: ${currentPlayTime.toFixed(2)}s`);
       }
 
       // 更新URL参数（不刷新页面）
@@ -2739,6 +2858,7 @@ function PlayPageClient() {
       newUrl.searchParams.set('source', newSource);
       newUrl.searchParams.set('id', newId);
       newUrl.searchParams.set('year', newDetail.year);
+      newUrl.searchParams.set('index', targetIndex.toString());  // 🔥 同步URL的index参数
       window.history.replaceState({}, '', newUrl.toString());
 
       setVideoTitle(newDetail.title || newTitle);
@@ -2749,7 +2869,12 @@ function PlayPageClient() {
       setCurrentSource(newSource);
       setCurrentId(newId);
       setDetail(newDetail);
-      setCurrentEpisodeIndex(targetIndex);
+
+      // 🔥 只有当集数确实改变时才调用 setCurrentEpisodeIndex
+      // 这样可以避免触发不必要的 useEffect 和集数切换逻辑
+      if (targetIndex !== currentEpisodeIndex) {
+        setCurrentEpisodeIndex(targetIndex);
+      }
 
       // 🚀 换源完成后，优化弹幕加载流程
       setTimeout(async () => {
@@ -3046,6 +3171,7 @@ function PlayPageClient() {
         save_time: Date.now(),
         search_title: searchTitle,
         remarks: remarksToSave, // 优先使用搜索结果的 remarks，因为详情接口可能没有
+        douban_id: videoDoubanIdRef.current || detailRef.current?.douban_id || undefined, // 添加豆瓣ID
       });
 
       lastSaveTimeRef.current = Date.now();
@@ -5027,6 +5153,70 @@ function PlayPageClient() {
               <p className='text-xl font-semibold text-gray-800 dark:text-gray-200 animate-pulse'>
                 {loadingMessage}
               </p>
+
+              {/* Netflix风格测速进度显示 */}
+              {speedTestProgress && (
+                <div className='mt-6 space-y-3'>
+                  {/* 进度条容器 */}
+                  <div className='relative w-full'>
+                    {/* 背景进度条 */}
+                    <div className='h-1 bg-gray-200 dark:bg-gray-700 rounded-full overflow-hidden'>
+                      {/* 动态进度条 - Netflix红色 */}
+                      <div
+                        className='h-full bg-gradient-to-r from-red-600 to-red-500 rounded-full transition-all duration-300 ease-out relative overflow-hidden'
+                        style={{
+                          width: `${(speedTestProgress.current / speedTestProgress.total) * 100}%`,
+                        }}
+                      >
+                        {/* 闪烁效果 */}
+                        <div className='absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer'></div>
+                      </div>
+                    </div>
+
+                    {/* 进度数字 - 靠右显示 */}
+                    <div className='absolute -top-6 right-0 text-xs font-medium text-gray-500 dark:text-gray-400'>
+                      {speedTestProgress.current}/{speedTestProgress.total}
+                    </div>
+                  </div>
+
+                  {/* 当前测试源信息卡片 */}
+                  <div className='bg-gray-50 dark:bg-gray-800/50 rounded-lg p-3 border border-gray-200 dark:border-gray-700'>
+                    <div className='flex items-center gap-2'>
+                      {/* 脉动指示器 */}
+                      <div className='relative'>
+                        <div className='w-2 h-2 bg-red-500 rounded-full animate-pulse'></div>
+                        <div className='absolute inset-0 w-2 h-2 bg-red-500 rounded-full animate-ping'></div>
+                      </div>
+
+                      {/* 源名称 */}
+                      <span className='text-sm font-semibold text-gray-700 dark:text-gray-300 truncate flex-1'>
+                        {speedTestProgress.currentSource}
+                      </span>
+                    </div>
+
+                    {/* 测试结果 */}
+                    {speedTestProgress.result && (
+                      <div className='mt-2 flex items-center gap-2 text-xs text-gray-600 dark:text-gray-400 font-mono'>
+                        {speedTestProgress.result === '测速失败' ? (
+                          <span className='text-red-500 flex items-center gap-1'>
+                            <svg className='w-3 h-3' fill='currentColor' viewBox='0 0 20 20'>
+                              <path fillRule='evenodd' d='M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z' clipRule='evenodd' />
+                            </svg>
+                            连接失败
+                          </span>
+                        ) : (
+                          <span className='text-green-600 dark:text-green-400 flex items-center gap-1'>
+                            <svg className='w-3 h-3' fill='currentColor' viewBox='0 0 20 20'>
+                              <path fillRule='evenodd' d='M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z' clipRule='evenodd' />
+                            </svg>
+                            {speedTestProgress.result}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -6178,6 +6368,50 @@ function PlayPageClient() {
         </div>
       )}
 
+      {/* 源切换确认对话框 */}
+      {showSourceSwitchDialog && pendingOwnerState && (
+        <div className='fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-9999'>
+          <div className='bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm mx-4 shadow-2xl'>
+            <div className='text-center'>
+              <div className='w-12 h-12 mx-auto mb-4 rounded-full bg-yellow-100 dark:bg-yellow-900/30 flex items-center justify-center'>
+                <svg className='w-6 h-6 text-yellow-500' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth={2} d='M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z' />
+                </svg>
+              </div>
+              <h3 className='text-lg font-semibold text-gray-900 dark:text-white mb-2'>
+                播放源不同
+              </h3>
+              <p className='text-sm text-gray-500 dark:text-gray-400 mb-3'>
+                房主使用的播放源与您不同，是否切换到房主的播放源？
+              </p>
+              <p className='text-base font-medium text-gray-900 dark:text-white mb-1'>
+                房主播放源
+              </p>
+              <p className='text-sm text-blue-500 dark:text-blue-400 mb-3 font-mono'>
+                {pendingOwnerState.source}
+              </p>
+              <p className='text-xs text-orange-500 dark:text-orange-400 mb-6'>
+                ⚠️ 保持当前源将无法与房主同步进度
+              </p>
+              <div className='flex gap-3'>
+                <button
+                  onClick={handleCancelSourceSwitch}
+                  className='flex-1 px-4 py-2.5 rounded-xl border border-gray-300 dark:border-gray-600 text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors font-medium'
+                >
+                  保持当前源
+                </button>
+                <button
+                  onClick={handleConfirmSourceSwitch}
+                  className='flex-1 px-4 py-2.5 rounded-xl bg-blue-500 hover:bg-blue-600 text-white transition-colors font-medium'
+                >
+                  切换源
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* 房主切换视频/集数确认框 */}
       {pendingOwnerChange && (
         <div className='fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-9999'>
@@ -6459,8 +6693,17 @@ export default function PlayPage() {
   return (
     <>
       <Suspense fallback={<div>Loading...</div>}>
-        <PlayPageClient />
+        <PlayPageClientWrapper />
       </Suspense>
     </>
   );
+}
+
+function PlayPageClientWrapper() {
+  const searchParams = useSearchParams();
+  // 使用 source + id 作为 key，强制在切换源时重新挂载组件
+  // 参考：https://github.com/vercel/next.js/issues/2819
+  const key = `${searchParams.get('source')}-${searchParams.get('id')}-${searchParams.get('_reload') || ''}`;
+
+  return <PlayPageClient key={key} />;
 }

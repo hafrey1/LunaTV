@@ -26,6 +26,75 @@ function randomDelay(min = 1000, max = 3000): Promise<void> {
 export const runtime = 'nodejs';
 
 // ============================================================================
+// 移动端API数据获取（预告片和高清图片）
+// ============================================================================
+
+/**
+ * 从移动端API获取预告片和高清图片（内部函数）
+ */
+async function _fetchMobileApiData(id: string): Promise<{
+  trailerUrl?: string;
+  backdrop?: string;
+} | null> {
+  try {
+    const mobileApiUrl = `https://m.douban.com/rexxar/api/v2/movie/${id}`;
+    const response = await fetch(mobileApiUrl, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 14_0 like Mac OS X) AppleWebKit/537.36',
+        'Referer': 'https://m.douban.com/',
+        'Accept': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      console.warn(`移动端API请求失败: ${response.status}`);
+      return null;
+    }
+
+    const data = await response.json();
+
+    // 提取预告片URL（取第一个预告片）
+    const trailerUrl = data.trailers?.[0]?.video_url || undefined;
+
+    // 提取高清图片：优先使用raw原图，转换URL到最高清晰度
+    let backdrop = data.cover?.image?.raw?.url ||
+                  data.cover?.image?.large?.url ||
+                  data.cover?.image?.normal?.url ||
+                  data.pic?.large ||
+                  undefined;
+
+    // 将图片URL转换为高清版本（使用l而不是raw，避免重定向）
+    if (backdrop) {
+      backdrop = backdrop
+        .replace('/view/photo/s/', '/view/photo/l/')
+        .replace('/view/photo/m/', '/view/photo/l/')
+        .replace('/view/photo/sqxs/', '/view/photo/l/')
+        .replace('/s_ratio_poster/', '/l_ratio_poster/')
+        .replace('/m_ratio_poster/', '/l_ratio_poster/');
+    }
+
+    return { trailerUrl, backdrop };
+  } catch (error) {
+    console.warn(`获取移动端API数据失败: ${(error as Error).message}`);
+    return null;
+  }
+}
+
+/**
+ * 使用 unstable_cache 包裹移动端API请求
+ * - 7天缓存（预告片和高清图片很少变化）
+ * - 与详情页缓存分开管理
+ */
+const fetchMobileApiData = unstable_cache(
+  _fetchMobileApiData,
+  ['douban-mobile-api'],
+  {
+    revalidate: 604800, // 7天缓存
+    tags: ['douban-mobile'],
+  }
+);
+
+// ============================================================================
 // 核心爬虫函数（带缓存）
 // ============================================================================
 
@@ -150,14 +219,14 @@ async function _scrapeDoubanDetails(id: string, retryCount = 0): Promise<any> {
 
 /**
  * 使用 unstable_cache 包裹爬虫函数
- * - 24小时缓存
+ * - 4小时缓存
  * - 自动重新验证
  */
-const scrapeDoubanDetails = unstable_cache(
+export const scrapeDoubanDetails = unstable_cache(
   _scrapeDoubanDetails,
   ['douban-details'],
   {
-    revalidate: 86400, // 24小时缓存
+    revalidate: 14400, // 4小时缓存
     tags: ['douban'],
   }
 );
@@ -165,6 +234,7 @@ const scrapeDoubanDetails = unstable_cache(
 export async function GET(request: Request) {
   const { searchParams } = new URL(request.url);
   const id = searchParams.get('id');
+  const noCache = searchParams.get('nocache') === '1' || searchParams.get('debug') === '1';
 
   if (!id) {
     return NextResponse.json(
@@ -178,18 +248,39 @@ export async function GET(request: Request) {
   }
 
   try {
-    const details = await scrapeDoubanDetails(id);
+    // 并行获取详情和移动端API数据
+    const [details, mobileData] = await Promise.all([
+      scrapeDoubanDetails(id),
+      fetchMobileApiData(id),
+    ]);
+
+    // 合并数据：混合使用爬虫和移动端API的优势
+    if (details.code === 200 && details.data && mobileData) {
+      // 预告片来自移动端API
+      details.data.trailerUrl = mobileData.trailerUrl;
+      // Backdrop优先使用爬虫的剧照（横版高清），否则用移动端API的海报
+      if (!details.data.backdrop && mobileData.backdrop) {
+        details.data.backdrop = mobileData.backdrop;
+      }
+    }
 
     const cacheTime = await getCacheTime();
-    return NextResponse.json(details, {
-      headers: {
-        'Cache-Control': `public, max-age=${cacheTime}, s-maxage=86400, stale-while-revalidate=43200`,
-        'CDN-Cache-Control': `public, s-maxage=86400`,
-        'Vercel-CDN-Cache-Control': `public, s-maxage=86400`,
-        'Netlify-Vary': 'query',
-        'X-Data-Source': 'scraper-cached',
-      },
-    });
+
+    // 🔍 调试模式：绕过缓存
+    const cacheHeaders = noCache ? {
+      'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'X-Data-Source': 'no-cache-debug',
+    } : {
+      'Cache-Control': `public, max-age=${cacheTime}, s-maxage=86400, stale-while-revalidate=43200`,
+      'CDN-Cache-Control': `public, s-maxage=86400`,
+      'Vercel-CDN-Cache-Control': `public, s-maxage=86400`,
+      'Netlify-Vary': 'query',
+      'X-Data-Source': 'scraper-cached',
+    };
+
+    return NextResponse.json(details, { headers: cacheHeaders });
   } catch (error) {
     // 处理 DoubanError
     if (error instanceof DoubanError) {
@@ -493,6 +584,22 @@ function parseDoubanDetails(html: string, id: string) {
         .replace(/\n{3,}/g, '\n\n');     // 将多个换行合并为最多两个
     }
 
+    // 🎬 提取剧照作为backdrop（横版高清图，比竖版海报更适合做背景）
+    let scenePhoto: string | undefined;
+    const photosSection = html.match(/<div[^>]*id="related-pic"[\s\S]*?<ul[^>]*>([\s\S]*?)<\/ul>/);
+    if (photosSection) {
+      // 查找第一张剧照图片URL
+      const photoMatch = photosSection[1].match(/https:\/\/img[0-9]\.doubanio\.com\/view\/photo\/[a-z_]*\/public\/p[0-9]+\.jpg/);
+      if (photoMatch) {
+        // 转换为高清版本（使用l而不是raw，避免重定向）
+        scenePhoto = photoMatch[0]
+          .replace(/^http:/, 'https:')
+          .replace('/view/photo/s/', '/view/photo/l/')
+          .replace('/view/photo/m/', '/view/photo/l/')
+          .replace('/view/photo/sqxs/', '/view/photo/l/');
+      }
+    }
+
     return {
       code: 200,
       message: '获取成功',
@@ -517,6 +624,10 @@ function parseDoubanDetails(html: string, id: string) {
         recommendations,
         // 🎯 新增：将 celebrities 中的演员单独提取为 actors 字段
         actors: celebrities.filter(c => !c.role.includes('导演')),
+        // 🎬 剧照作为backdrop（横版高清图）
+        backdrop: scenePhoto,
+        // 🎬 预告片URL（由移动端API填充）
+        trailerUrl: undefined,
       }
     };
   } catch (error) {

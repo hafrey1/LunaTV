@@ -66,15 +66,39 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // 检查API配置是否完整
-    if (!aiConfig.apiKey || !aiConfig.apiUrl) {
-      return NextResponse.json({ 
-        error: 'AI推荐功能配置不完整，请联系管理员' 
+    // 🔥 检查配置模式：AI模式 or 纯搜索模式
+    // 确保trim后再判断，避免空字符串或纯空格被当成有效配置
+    const hasAIModel = !!(
+      aiConfig.apiKey?.trim() &&
+      aiConfig.apiUrl?.trim() &&
+      aiConfig.model?.trim()
+    );
+    const hasTavilySearch = !!(
+      aiConfig.enableWebSearch &&
+      aiConfig.tavilyApiKeys &&
+      aiConfig.tavilyApiKeys.length > 0
+    );
+
+    console.log('🔍 配置模式检测:', {
+      hasAIModel,
+      hasTavilySearch,
+      apiKeyLength: aiConfig.apiKey?.length || 0,
+      apiUrlLength: aiConfig.apiUrl?.length || 0,
+      modelLength: aiConfig.model?.length || 0,
+      tavilyKeysCount: aiConfig.tavilyApiKeys?.length || 0
+    });
+
+    // 至少需要一种模式可用
+    if (!hasAIModel && !hasTavilySearch) {
+      return NextResponse.json({
+        error: 'AI推荐功能配置不完整。请配置AI API或启用Tavily搜索功能。'
       }, { status: 500 });
     }
 
     const body = await request.json();
     const { messages, model, temperature, max_tokens, max_completion_tokens, context, stream } = body as ChatRequest & { context?: any };
+
+    console.log('🔍 请求参数:', { stream, hasAIModel, hasTavilySearch });
 
     // 验证请求格式
     if (!messages || !Array.isArray(messages) || messages.length === 0) {
@@ -277,6 +301,174 @@ ${youtubeEnabled && youtubeConfig.apiKey ? `### YouTube推荐格式：
       } catch (error) {
         console.error('预解析YouTube视频失败:', error);
       }
+    }
+
+    // 🔥 纯搜索模式：如果没有AI模型，直接返回格式化的搜索结果
+    if (!hasAIModel && orchestrationResult?.webSearchResults) {
+      console.log('📋 纯搜索模式：直接返回Tavily搜索结果');
+
+      const searchResults = orchestrationResult.webSearchResults;
+      let formattedContent = `🌐 **搜索结果**（来自 Tavily）\n\n`;
+
+      // 添加视频上下文
+      if (context?.title) {
+        formattedContent += `**您正在查看**：${context.title}`;
+        if (context.year) formattedContent += ` (${context.year})`;
+        formattedContent += `\n\n`;
+      }
+
+      // 格式化搜索结果
+      if (searchResults.results && searchResults.results.length > 0) {
+        formattedContent += `找到 ${searchResults.results.length} 条相关信息：\n\n`;
+
+        searchResults.results.forEach((result, index) => {
+          formattedContent += `### ${index + 1}. ${result.title}\n\n`;
+          formattedContent += `${result.content}\n\n`;
+          formattedContent += `📎 来源：[${new URL(result.url).hostname}](${result.url})\n\n`;
+          formattedContent += `---\n\n`;
+        });
+
+        formattedContent += `💡 **提示**：以上信息来自实时网络搜索，可能需要进一步核实。`;
+      } else {
+        formattedContent += `抱歉，没有找到相关信息。请尝试其他关键词。`;
+      }
+
+      // 🔥 如果是流式请求，返回SSE流
+      if (stream) {
+        console.log('📡 返回SSE流式搜索结果');
+        const encoder = new TextEncoder();
+        const readableStream = new ReadableStream({
+          start(controller) {
+            // 发送完整内容
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: formattedContent })}\n\n`));
+            // 发送结束标记
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          }
+        });
+
+        return new NextResponse(readableStream, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        });
+      }
+
+      // 非流式请求，返回普通JSON
+      const response = {
+        id: `search-${Date.now()}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'tavily-search',
+        choices: [{
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: formattedContent
+          },
+          finish_reason: 'stop'
+        }],
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0
+        }
+      };
+
+      return NextResponse.json(response);
+    }
+
+    // 🔥 如果没有AI模型且没有搜索结果，返回友好提示
+    if (!hasAIModel) {
+      console.log('💡 返回友好使用提示（纯搜索模式）');
+
+      // 构建友好的提示内容
+      const friendlyMessage = `> 💡 **提示**：当前系统仅支持**实时搜索功能**（未配置AI对话模型）
+
+## 您可以这样提问：
+
+### ✅ 支持的问题类型（会触发联网搜索）：
+
+**时效性问题：**
+- "2025年最新上映的科幻电影有哪些？"
+- "今年有什么好看的电视剧？"
+- "最近上映的电影推荐"
+
+**演员/导演查询：**
+- "诺兰最新的电影是什么？"
+- "周星驰有什么新作品？"
+- "张艺谋的最新电影"
+
+**影视资讯：**
+- "《流浪地球3》什么时候上映？"
+- "最新的漫威电影"
+- "即将上映的动画片"
+
+${context?.title ? `**关于当前影片（${context.title}）：**
+- "这部电影什么时候上映的？"
+- "有续集吗？"
+- "演员阵容如何？"` : ''}
+
+---
+
+### ❌ 暂不支持的问题类型（需要AI对话模型）：
+
+- 通用推荐（如"推荐几部科幻电影"）
+- 剧情分析和总结
+- 上下文对话和追问
+
+---
+
+💬 **建议**：
+1. 在问题中加入**时间关键词**（最新、今年、2025、上映等）
+2. 或询问**特定演员/导演**的作品
+3. 如需更多功能，请联系管理员配置AI对话模型`;
+
+      // 🔥 如果是流式请求，返回SSE流
+      if (stream) {
+        console.log('📡 返回SSE流式友好提示');
+        const encoder = new TextEncoder();
+        const readableStream = new ReadableStream({
+          start(controller) {
+            // 发送完整内容
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ text: friendlyMessage })}\n\n`));
+            // 发送结束标记
+            controller.enqueue(encoder.encode('data: [DONE]\n\n'));
+            controller.close();
+          }
+        });
+
+        return new NextResponse(readableStream, {
+          headers: {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+          },
+        });
+      }
+
+      // 非流式请求，返回普通JSON
+      return NextResponse.json({
+        id: `search-hint-${Date.now()}`,
+        object: 'chat.completion',
+        created: Math.floor(Date.now() / 1000),
+        model: 'tavily-search-only',
+        choices: [{
+          index: 0,
+          message: {
+            role: 'assistant',
+            content: friendlyMessage
+          },
+          finish_reason: 'stop'
+        }],
+        usage: {
+          prompt_tokens: 0,
+          completion_tokens: 0,
+          total_tokens: 0
+        }
+      });
     }
 
     // 准备发送给OpenAI的消息

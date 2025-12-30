@@ -14,6 +14,7 @@ interface UseWatchRoomSyncOptions {
   currentSource: string;  // 当前播放源
   videoTitle: string;  // 视频标题
   videoYear: string;  // 视频年份
+  videoDoubanId?: number;  // 豆瓣ID（最准确的标识）
   searchTitle?: string;  // 搜索标题（用于搜索时的原始标题）
   setCurrentEpisodeIndex: (index: number) => void;  // 切换集数的函数
 }
@@ -29,6 +30,7 @@ export interface OwnerPlayState {
   searchTitle?: string;
   poster?: string;
   totalEpisodes?: number;
+  doubanId?: number;  // 豆瓣ID（用于准确判断是否是同一部视频）
 }
 
 export function useWatchRoomSync({
@@ -41,12 +43,17 @@ export function useWatchRoomSync({
   currentSource,
   videoTitle,
   videoYear,
+  videoDoubanId,
   searchTitle,
   setCurrentEpisodeIndex
 }: UseWatchRoomSyncOptions) {
   const router = useRouter();
   const isHandlingRemoteCommandRef = useRef(false);
   const lastSyncTimeRef = useRef(0);
+
+  // 源切换确认对话框状态
+  const [showSourceSwitchDialog, setShowSourceSwitchDialog] = useState(false);
+  const [pendingOwnerState, setPendingOwnerState] = useState<OwnerPlayState | null>(null);
 
   // 同步暂停状态（成员自己切换集数后暂停同步）
   const [syncPaused, setSyncPaused] = useState(false);
@@ -66,30 +73,61 @@ export function useWatchRoomSync({
   const currentRoom = watchRoom?.currentRoom;
   const socket = watchRoom?.socket;
 
+  // 辅助函数：判断是否是同一部视频（优先使用豆瓣ID，否则用 title + year）
+  const isSameVideoContent = useCallback((state: OwnerPlayState | PlayState | null) => {
+    if (!state) return false;
+
+    // 优先使用豆瓣ID判断（最准确）
+    const stateDoubanId = 'doubanId' in state ? state.doubanId : undefined;
+    if (videoDoubanId && stateDoubanId) {
+      return videoDoubanId === stateDoubanId;
+    }
+
+    // 如果没有豆瓣ID，使用 title + year
+    const stateVideoName = 'videoName' in state ? state.videoName : '';
+    const stateVideoYear = 'videoYear' in state ? state.videoYear : '';
+
+    // 标题和年份都要匹配（标题必须，年份如果有的话也要匹配）
+    const titleMatch = stateVideoName === videoTitle;
+    const yearMatch = !stateVideoYear || !videoYear || stateVideoYear === videoYear;
+
+    return titleMatch && yearMatch;
+  }, [videoTitle, videoYear, videoDoubanId]);
+
   // 检查是否与房主观看同一视频同一集（用于判断是否同步进度）
   const isSameVideoAndEpisode = useCallback((state: OwnerPlayState | PlayState | null) => {
     if (!state) return false;
-    const stateVideoId = 'videoId' in state ? state.videoId : '';
     const stateSource = 'source' in state ? state.source : '';
     const stateEpisode = 'episode' in state ? (state.episode || 0) : 0;
 
-    return stateVideoId === videoId &&
+    return isSameVideoContent(state) &&
       stateSource === currentSource &&
       stateEpisode === episodeIndex;
-  }, [videoId, currentSource, episodeIndex]);
+  }, [isSameVideoContent, currentSource, episodeIndex]);
 
   // 检查是否与房主观看同一部剧（不同集也算）
   const isSameVideo = useCallback((state: OwnerPlayState | PlayState | null) => {
     if (!state) return false;
-    const stateVideoId = 'videoId' in state ? state.videoId : '';
     const stateSource = 'source' in state ? state.source : '';
 
-    return stateVideoId === videoId && stateSource === currentSource;
-  }, [videoId, currentSource]);
+    return isSameVideoContent(state) && stateSource === currentSource;
+  }, [isSameVideoContent, currentSource]);
+
+  // 检查是否是相同视频但不同源
+  const isSameVideoButDifferentSource = useCallback((state: OwnerPlayState | PlayState | null) => {
+    if (!state) return false;
+    const stateSource = 'source' in state ? state.source : '';
+
+    return isSameVideoContent(state) && stateSource !== currentSource;
+  }, [isSameVideoContent, currentSource]);
 
   // 跳转到指定状态（智能切换：同剧切集数，异剧用路由）
   const navigateToState = useCallback((state: OwnerPlayState) => {
-    const isSameShow = state.videoId === videoId && state.source === currentSource;
+    // 使用 title+year 判断是否是同一部剧（而不是 videoId，因为不同源的 ID 不同）
+    const titleMatch = state.videoName === videoTitle;
+    const yearMatch = !state.videoYear || !videoYear || state.videoYear === videoYear;
+    const sourceMatch = state.source === currentSource;
+    const isSameShow = titleMatch && yearMatch && sourceMatch;
 
     if (isSameShow) {
       // 同一部剧，只需要切换集数，不刷新页面
@@ -108,7 +146,7 @@ export function useWatchRoomSync({
       }, 1000);  // 给播放器足够时间加载新集数
 
     } else {
-      // 不同的剧，使用 router.push 跳转（客户端路由，不刷新页面）
+      // 不同的剧或不同的源，使用 router.push 跳转（不刷新页面，保持 WebSocket 连接）
       const params = new URLSearchParams();
       params.set('id', state.videoId);
       params.set('source', state.source);
@@ -125,11 +163,42 @@ export function useWatchRoomSync({
       if (state.searchTitle) {
         params.set('stitle', state.searchTitle);
       }
+      // 添加特殊标记，告诉播放页面需要强制重新加载
+      params.set('_reload', Date.now().toString());
+
       const url = `/play?${params.toString()}`;
-      console.log('[PlaySync] Different show, routing to:', url);
+      console.log('[PlaySync] Different show or source, navigating with router.push:', url);
+
+      // 使用 router.push 而不是 window.location.href，保持 WebSocket 连接
       router.push(url);
+
+      // 关键修复：在 push 后延迟调用 refresh，确保数据重新加载
+      // 参考：https://github.com/vercel/next.js/issues/54766
+      setTimeout(() => {
+        router.refresh();
+        console.log('[PlaySync] Called router.refresh() to reload data');
+      }, 100);
     }
-  }, [videoId, currentSource, episodeIndex, setCurrentEpisodeIndex, artPlayerRef, router]);
+  }, [videoTitle, videoYear, currentSource, episodeIndex, setCurrentEpisodeIndex, artPlayerRef, router]);
+
+  // 确认切换源
+  const handleConfirmSourceSwitch = useCallback(() => {
+    if (pendingOwnerState) {
+      console.log('[PlaySync] User confirmed source switch, navigating to:', pendingOwnerState);
+      navigateToState(pendingOwnerState);
+    }
+    setShowSourceSwitchDialog(false);
+    setPendingOwnerState(null);
+  }, [pendingOwnerState, navigateToState]);
+
+  // 取消切换源，保持当前源
+  const handleCancelSourceSwitch = useCallback(() => {
+    console.log('[PlaySync] User cancelled source switch, keeping current source');
+    setShowSourceSwitchDialog(false);
+    setPendingOwnerState(null);
+    // 暂停同步，避免后续继续提示
+    setSyncPaused(true);
+  }, []);
 
   // 广播播放状态（任何人都可以触发同步）
   const broadcastPlayState = useCallback(() => {
@@ -151,6 +220,7 @@ export function useWatchRoomSync({
       source: currentSource,
       poster: detail?.poster || '',
       totalEpisodes: detail?.episodes?.length || undefined,
+      doubanId: videoDoubanId || detail?.douban_id || undefined,  // 添加豆瓣ID
     };
 
     // 使用防抖，避免频繁发送
@@ -161,6 +231,15 @@ export function useWatchRoomSync({
     watchRoom.updatePlayState(state);
   }, [socket, watchRoom, artPlayerRef, isInRoom, detail, episodeIndex, videoId, currentSource, videoTitle, videoYear]);
 
+  // === -1. 当 videoId 或 currentSource 变化时，重置初始同步标记 ===
+  useEffect(() => {
+    // 只有成员需要重置，房主不需要
+    if (!isOwner && isInRoom) {
+      console.log('[PlaySync] Video/Source changed, resetting initial sync flag', { videoId, currentSource });
+      initialSyncDoneRef.current = false;
+    }
+  }, [videoId, currentSource, isOwner, isInRoom]);
+
   // === 0. 成员加入房间时，检查房主状态并跳转 ===
   useEffect(() => {
     // 只有成员需要处理，房主不需要
@@ -169,8 +248,13 @@ export function useWatchRoomSync({
       return;
     }
 
+    // 当 videoId 或 currentSource 变化时，重置初始同步标记（允许重新检测）
+    // 这样当成员切换源或视频时，可以重新触发检测逻辑
+    // （注意：不能放在这里直接重置，因为会导致每次 render 都重置）
+
     // 已经处理过初始同步，跳过
     if (initialSyncDoneRef.current) {
+      console.log('[PlaySync] Initial sync already done, skipping');
       return;
     }
 
@@ -193,6 +277,7 @@ export function useWatchRoomSync({
       searchTitle: roomState.searchTitle,
       poster: roomState.poster,
       totalEpisodes: roomState.totalEpisodes,
+      doubanId: roomState.doubanId,  // 添加豆瓣ID
     };
     setOwnerState(newOwnerState);
 
@@ -211,11 +296,21 @@ export function useWatchRoomSync({
       return;
     }
 
-    // 不是同一视频/集数，需要跳转到房主正在观看的内容
+    // 不是同一视频/集数，检查是否是源不同
+    if (isSameVideoButDifferentSource(roomState)) {
+      // 相同视频但不同源，显示确认对话框
+      console.log('[PlaySync] Same video but different source, showing confirmation dialog');
+      setPendingOwnerState(newOwnerState);
+      setShowSourceSwitchDialog(true);
+      initialSyncDoneRef.current = true;
+      return;
+    }
+
+    // 完全不同的视频，直接跳转
     console.log('[PlaySync] Different video/episode, redirecting to owner content');
     initialSyncDoneRef.current = true;
     navigateToState(newOwnerState);
-  }, [isOwner, isInRoom, currentRoom, playerReady, isSameVideoAndEpisode, navigateToState, artPlayerRef]);
+  }, [isOwner, isInRoom, currentRoom, playerReady, isSameVideoAndEpisode, isSameVideoButDifferentSource, navigateToState, artPlayerRef]);
 
   // === 1. 接收并同步其他成员的播放状态（所有人都监听）===
   useEffect(() => {
@@ -240,6 +335,7 @@ export function useWatchRoomSync({
         searchTitle: state.searchTitle,
         poster: state.poster,
         totalEpisodes: state.totalEpisodes,
+        doubanId: state.doubanId,  // 添加豆瓣ID
       };
       setOwnerState(newOwnerState);
 
@@ -383,6 +479,7 @@ export function useWatchRoomSync({
         searchTitle: state.searchTitle,
         poster: state.poster,
         totalEpisodes: state.totalEpisodes,
+        doubanId: state.doubanId,  // 添加豆瓣ID
       };
       setOwnerState(newOwnerState);
 
@@ -572,6 +669,7 @@ export function useWatchRoomSync({
         source: currentSource,
         poster: detail?.poster || '',
         totalEpisodes: detail?.episodes?.length || undefined,
+        doubanId: videoDoubanId || detail?.douban_id || undefined,  // 添加豆瓣ID
       };
 
       console.log('[PlaySync] Broadcasting play:change:', state);
@@ -642,5 +740,10 @@ export function useWatchRoomSync({
     confirmFollowOwner,
     rejectFollowOwner,
     clearPendingChange,
+    // 源切换确认对话框
+    showSourceSwitchDialog,
+    pendingOwnerState,
+    handleConfirmSourceSwitch,
+    handleCancelSourceSwitch,
   };
 }
