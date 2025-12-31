@@ -266,8 +266,28 @@ export default function HeroBanner({
                     });
 
                     // 检测是否是403错误（trailer URL过期）
-                    // 如果有douban_id，尝试刷新URL
-                    if (item.douban_id && !refreshedTrailerUrls[item.douban_id]) {
+                    if (item.douban_id) {
+                      // 如果localStorage中有URL，说明之前刷新过，但现在又失败了
+                      // 需要清除localStorage中的旧URL，重新刷新
+                      if (refreshedTrailerUrls[item.douban_id]) {
+                        console.log('[HeroBanner] localStorage中的URL也过期了，清除并重新获取');
+
+                        // 清除state和localStorage中的旧URL
+                        setRefreshedTrailerUrls(prev => {
+                          const updated = { ...prev };
+                          delete updated[item.douban_id];
+
+                          try {
+                            localStorage.setItem('refreshed-trailer-urls', JSON.stringify(updated));
+                          } catch (error) {
+                            console.error('[HeroBanner] 清除localStorage失败:', error);
+                          }
+
+                          return updated;
+                        });
+                      }
+
+                      // 重新刷新URL
                       const newUrl = await refreshTrailerUrl(item.douban_id);
                       if (newUrl) {
                         // 重新加载视频
