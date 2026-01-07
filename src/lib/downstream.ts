@@ -4,6 +4,11 @@ import { API_CONFIG, ApiSite, getConfig } from '@/lib/config';
 import { getCachedSearchPage, setCachedSearchPage } from '@/lib/search-cache';
 import { SearchResult } from '@/lib/types';
 import { cleanHtmlTags } from '@/lib/utils';
+// 使用轻量级 switch-chinese 库（93.8KB vs opencc-js 5.6MB）
+import stcasc, { ChineseType } from 'switch-chinese';
+
+// 创建模块级别的繁简转换器实例
+const converter = stcasc();
 
 interface ApiSearchItem {
   vod_id: string;
@@ -138,13 +143,14 @@ async function searchWithCache(
 
 export async function searchFromApi(
   apiSite: ApiSite,
-  query: string
+  query: string,
+  precomputedVariants?: string[] // 新增：预计算的变体
 ): Promise<SearchResult[]> {
   try {
     const apiBaseUrl = apiSite.api;
 
-    // 智能搜索：生成搜索变体（优化：只生成最有用的变体）
-    const searchVariants = generateSearchVariants(query).slice(0, 2); // 最多只用前2个变体
+    // 智能搜索：使用预计算的变体或即时生成（优化：只生成最有用的变体）
+    const searchVariants = precomputedVariants || generateSearchVariants(query).slice(0, 2);
     let results: SearchResult[] = [];
     let pageCountFromFirst = 0;
 
@@ -337,7 +343,7 @@ const M3U8_PATTERN = /(https?:\/\/[^"'\s]+?\.m3u8)/g;
  * @param originalQuery 原始查询
  * @returns 按优先级排序的搜索变体数组
  */
-function generateSearchVariants(originalQuery: string): string[] {
+export function generateSearchVariants(originalQuery: string): string[] {
   const variants: string[] = [];
   const trimmed = originalQuery.trim();
 
@@ -352,7 +358,7 @@ function generateSearchVariants(originalQuery: string): string[] {
     }
   });
 
-  // 3. 移除数字变体生成（优化性能，依赖页面智能匹配逻辑处理数字差异）
+  // 4. 移除数字变体生成（优化性能，依赖页面智能匹配逻辑处理数字差异）
   // const numberVariants = generateNumberVariants(trimmed);
   // numberVariants.forEach(variant => {
   //   if (!variants.includes(variant)) {
@@ -362,19 +368,19 @@ function generateSearchVariants(originalQuery: string): string[] {
 
   // 如果包含空格，生成额外变体
   if (trimmed.includes(' ')) {
-    // 4. 去除所有空格
+    // 5. 去除所有空格
     const noSpaces = trimmed.replace(/\s+/g, '');
     if (noSpaces !== trimmed) {
       variants.push(noSpaces);
     }
 
-    // 5. 标准化空格（多个空格合并为一个）
+    // 6. 标准化空格（多个空格合并为一个）
     const normalizedSpaces = trimmed.replace(/\s+/g, ' ');
     if (normalizedSpaces !== trimmed && !variants.includes(normalizedSpaces)) {
       variants.push(normalizedSpaces);
     }
 
-    // 6. 提取关键词组合（针对"中餐厅 第九季"这种情况）
+    // 7. 提取关键词组合（针对"中餐厅 第九季"这种情况）
     const keywords = trimmed.split(/\s+/);
     if (keywords.length >= 2) {
       // 主要关键词 + 季/集等后缀
@@ -389,13 +395,13 @@ function generateSearchVariants(originalQuery: string): string[] {
         }
       }
 
-      // 7. 空格变冒号的变体（重要！针对"死神来了 血脉诅咒" -> "死神来了：血脉诅咒"）
+      // 8. 空格变冒号的变体（重要！针对"死神来了 血脉诅咒" -> "死神来了：血脉诅咒"）
       const withColon = trimmed.replace(/\s+/g, '：');
       if (!variants.includes(withColon)) {
         variants.push(withColon);
       }
 
-      // 8. 空格变英文冒号的变体
+      // 9. 空格变英文冒号的变体
       const withEnglishColon = trimmed.replace(/\s+/g, ':');
       if (!variants.includes(withEnglishColon)) {
         variants.push(withEnglishColon);
@@ -411,8 +417,31 @@ function generateSearchVariants(originalQuery: string): string[] {
     }
   }
 
-  // 去重并返回
-  return Array.from(new Set(variants));
+  // 去重
+  const uniqueVariants = Array.from(new Set(variants));
+
+  // 最后：只对前几个优先级高的变体进行繁体转简体处理
+  // 优化：使用 detect() 先检测，避免对简体输入进行无用转换（detect比simplized快1.5-3倍）
+  const finalVariants: string[] = [];
+  const MAX_VARIANTS_TO_CONVERT = 3; // 只转换前3个变体
+
+  uniqueVariants.forEach((variant, index) => {
+    finalVariants.push(variant);
+    // 只对前几个变体进行繁转简
+    if (index < MAX_VARIANTS_TO_CONVERT) {
+      // 优化：先用 detect() 检测，简体直接跳过（快1.5-3倍）
+      const type = converter.detect(variant);
+      if (type !== ChineseType.SIMPLIFIED) {
+        const simplifiedVariant = converter.simplized(variant);
+        if (simplifiedVariant !== variant && !finalVariants.includes(simplifiedVariant)) {
+          finalVariants.push(simplifiedVariant);
+          console.log(`[DEBUG] 添加繁转简变体: "${variant}" -> "${simplifiedVariant}"`);
+        }
+      }
+    }
+  });
+
+  return finalVariants;
 }
 
 /**
