@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { DEFAULT_USER_AGENT } from '@/lib/user-agent';
 
 // 强制动态路由，禁用所有缓存
 export const dynamic = 'force-dynamic';
@@ -15,7 +16,7 @@ async function searchShortDramasInternal(
     `https://api.r2afosne.dpdns.org/vod/search?name=${encodeURIComponent(query)}&page=${page}&size=${size}`,
     {
       headers: {
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'User-Agent': DEFAULT_USER_AGENT,
         'Accept': 'application/json',
       },
     }
