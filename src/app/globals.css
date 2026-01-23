@@ -116,11 +116,6 @@ body {
   overscroll-behavior: none;
   /* iOS Safari 平滑惯性滚动 */
   -webkit-overflow-scrolling: touch;
-  /* 优化滚动性能 - 2026最佳实践 */
-  transform: translateZ(0);
-  -webkit-transform: translateZ(0);
-  /* 提示浏览器优化滚动 */
-  will-change: scroll-position;
 }
 
 body {

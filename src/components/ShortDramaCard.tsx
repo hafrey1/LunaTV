@@ -6,6 +6,9 @@ import { Play, Star, Heart } from 'lucide-react';
 import Link from 'next/link';
 import { memo, useEffect, useState, useCallback } from 'react';
 
+import { useLongPress } from '@/hooks/useLongPress';
+import MobileActionSheet from '@/components/MobileActionSheet';
+
 import { ShortDramaItem } from '@/lib/types';
 import {
   SHORTDRAMA_CACHE_EXPIRE,
@@ -36,6 +39,7 @@ function ShortDramaCard({
   const [showEpisodeCount, setShowEpisodeCount] = useState(drama.episode_count > 1); // 如果初始集数>1就显示
   const [imageLoaded, setImageLoaded] = useState(false); // 图片加载状态
   const [favorited, setFavorited] = useState(false); // 收藏状态
+  const [showMobileActions, setShowMobileActions] = useState(false); // 移动端操作面板
 
   // 短剧的source固定为shortdrama
   const source = 'shortdrama';
@@ -175,6 +179,23 @@ function ShortDramaCard({
     [favorited, source, id, drama.name, drama.cover, realEpisodeCount]
   );
 
+  // 处理长按事件
+  const handleLongPress = useCallback(() => {
+    setShowMobileActions(true);
+  }, []);
+
+  // 处理点击事件（跳转到播放页面）
+  const handleClick = useCallback(() => {
+    // Link 组件会处理导航，这里不需要额外操作
+  }, []);
+
+  // 配置长按功能
+  const longPressProps = useLongPress({
+    onLongPress: handleLongPress,
+    onClick: handleClick,
+    longPressDelay: 500,
+  });
+
   const formatScore = (score: number) => {
     return score > 0 ? score.toFixed(1) : '--';
   };
@@ -193,6 +214,13 @@ function ShortDramaCard({
       <Link
         href={`/play?title=${encodeURIComponent(drama.name)}&shortdrama_id=${drama.id}`}
         className="block"
+        {...longPressProps}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          setShowMobileActions(true);
+          return false;
+        }}
       >
         {/* 封面图片 */}
         <div className="relative aspect-[2/3] w-full overflow-hidden rounded-lg bg-gray-200 dark:bg-gray-800">
@@ -295,6 +323,41 @@ function ShortDramaCard({
           )}
         </div>
       </Link>
+
+      {/* 移动端操作面板 */}
+      <MobileActionSheet
+        isOpen={showMobileActions}
+        onClose={() => setShowMobileActions(false)}
+        title={drama.name}
+        actions={[
+          {
+            id: 'favorite',
+            label: favorited ? '取消收藏' : '收藏',
+            icon: favorited ? 'heart-filled' : 'heart',
+            onClick: async () => {
+              try {
+                if (favorited) {
+                  await deleteFavorite(source, id);
+                  setFavorited(false);
+                } else {
+                  await saveFavorite(source, id, {
+                    title: drama.name,
+                    source_name: '短剧',
+                    year: '',
+                    cover: drama.cover,
+                    total_episodes: realEpisodeCount,
+                    save_time: Date.now(),
+                    search_title: drama.name,
+                  });
+                  setFavorited(true);
+                }
+              } catch (err) {
+                console.error('切换收藏状态失败:', err);
+              }
+            },
+          },
+        ]}
+      />
     </div>
   );
 }
