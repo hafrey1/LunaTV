@@ -7,35 +7,6 @@ const PUPPETEER_MAX_RETRIES = 3;
 const PUPPETEER_BASE_DELAY = 2000; // 2秒
 const PUPPETEER_MAX_DELAY = 30000; // 最大30秒
 
-// 🚀 浏览器实例池 - 复用浏览器实例以减少 CPU 使用
-let browserInstance: Browser | null = null;
-let browserInitPromise: Promise<Browser> | null = null;
-const BROWSER_IDLE_TIMEOUT = 5 * 60 * 1000; // 5分钟无活动后关闭浏览器
-let browserIdleTimer: NodeJS.Timeout | null = null;
-let activePagesCount = 0;
-
-/**
- * 重置浏览器空闲计时器
- */
-function resetBrowserIdleTimer() {
-  if (browserIdleTimer) {
-    clearTimeout(browserIdleTimer);
-  }
-
-  browserIdleTimer = setTimeout(async () => {
-    if (activePagesCount === 0 && browserInstance) {
-      console.log('[Puppeteer Pool] 🔄 浏览器空闲超时，关闭实例以释放资源');
-      try {
-        await browserInstance.close();
-      } catch (error) {
-        console.error('[Puppeteer Pool] ❌ 关闭浏览器失败:', error);
-      }
-      browserInstance = null;
-      browserInitPromise = null;
-    }
-  }, BROWSER_IDLE_TIMEOUT);
-}
-
 /**
  * 计算exponential backoff延迟（带jitter）
  * 参考: https://medium.com/@titoadeoye/requests-at-scale-exponential-backoff-with-jitter-with-examples-4d0521891923
@@ -55,82 +26,51 @@ function calculateBackoffDelay(retryCount: number): number {
 }
 
 /**
- * 获取 Puppeteer 浏览器实例（使用实例池）
+ * 获取 Puppeteer 浏览器实例
  * 自动处理 Docker、Vercel 和本地环境的配置差异
- * 🚀 优化：复用浏览器实例，减少 80-90% CPU 使用
  */
 export async function getBrowser(): Promise<Browser> {
-  // 如果浏览器实例存在且未关闭，直接返回
-  if (browserInstance && browserInstance.isConnected()) {
-    console.log('[Puppeteer Pool] ♻️ 复用现有浏览器实例');
-    resetBrowserIdleTimer();
-    return browserInstance;
+  const isDocker = process.env.DOCKER_BUILD === 'true';
+  const isVercel = process.env.VERCEL === '1';
+
+  const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
+    headless: true,
+    args: [
+      '--no-sandbox',
+      '--disable-setuid-sandbox',
+      '--disable-dev-shm-usage',
+      '--disable-accelerated-2d-canvas',
+      '--no-first-run',
+      '--no-zygote',
+      '--disable-gpu',
+      // 🎯 额外的反检测参数 - 基于2025-2026最佳实践
+      '--disable-blink-features=AutomationControlled', // 隐藏自动化标识
+      '--disable-features=IsolateOrigins,site-per-process',
+      '--window-size=1920,1080', // 模拟真实窗口大小
+    ],
+  };
+
+  // Docker 环境：使用系统 Chromium
+  if (isDocker && process.env.PUPPETEER_EXECUTABLE_PATH) {
+    launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
+  }
+  // Vercel 环境：使用 @sparticuz/chromium
+  else if (isVercel) {
+    const chromium = await import('@sparticuz/chromium');
+    launchOptions.executablePath = await chromium.default.executablePath();
+  }
+  // 本地开发：需要手动指定 Chrome/Chromium 路径
+  else {
+    // 本地需要安装 Chrome 或 Chromium
+    // 可以通过环境变量 CHROME_PATH 指定
+    if (process.env.CHROME_PATH) {
+      launchOptions.executablePath = process.env.CHROME_PATH;
+    } else {
+      throw new Error('本地开发环境需要设置 CHROME_PATH 环境变量指向 Chrome/Chromium 可执行文件');
+    }
   }
 
-  // 如果正在初始化，等待初始化完成
-  if (browserInitPromise) {
-    console.log('[Puppeteer Pool] ⏳ 等待浏览器初始化完成...');
-    return await browserInitPromise;
-  }
-
-  // 创建新的浏览器实例
-  console.log('[Puppeteer Pool] 🚀 启动新的浏览器实例...');
-
-  browserInitPromise = (async () => {
-    const isDocker = process.env.DOCKER_BUILD === 'true';
-    const isVercel = process.env.VERCEL === '1';
-
-    const launchOptions: Parameters<typeof puppeteer.launch>[0] = {
-      headless: true,
-      args: [
-        '--no-sandbox',
-        '--disable-setuid-sandbox',
-        '--disable-dev-shm-usage',
-        '--disable-accelerated-2d-canvas',
-        '--no-first-run',
-        '--no-zygote',
-        '--disable-gpu',
-        // 🎯 额外的反检测参数 - 基于2025-2026最佳实践
-        '--disable-blink-features=AutomationControlled', // 隐藏自动化标识
-        '--disable-features=IsolateOrigins,site-per-process',
-        '--window-size=1920,1080', // 模拟真实窗口大小
-      ],
-    };
-
-    // Docker 环境：使用系统 Chromium
-    if (isDocker && process.env.PUPPETEER_EXECUTABLE_PATH) {
-      launchOptions.executablePath = process.env.PUPPETEER_EXECUTABLE_PATH;
-    }
-    // Vercel 环境：使用 @sparticuz/chromium
-    else if (isVercel) {
-      const chromium = await import('@sparticuz/chromium');
-      launchOptions.executablePath = await chromium.default.executablePath();
-    }
-    // 本地开发：需要手动指定 Chrome/Chromium 路径
-    else {
-      // 本地需要安装 Chrome 或 Chromium
-      // 可以通过环境变量 CHROME_PATH 指定
-      if (process.env.CHROME_PATH) {
-        launchOptions.executablePath = process.env.CHROME_PATH;
-      } else {
-        throw new Error('本地开发环境需要设置 CHROME_PATH 环境变量指向 Chrome/Chromium 可执行文件');
-      }
-    }
-
-    const browser = await puppeteer.launch(launchOptions);
-    browserInstance = browser;
-
-    console.log('[Puppeteer Pool] ✅ 浏览器实例启动成功');
-    resetBrowserIdleTimer();
-
-    return browser;
-  })();
-
-  try {
-    return await browserInitPromise;
-  } finally {
-    browserInitPromise = null;
-  }
+  return await puppeteer.launch(launchOptions);
 }
 
 /**
@@ -143,17 +83,8 @@ async function _fetchPageWithPuppeteerOnce(url: string, options?: {
 }): Promise<{ html: string; cookies: any[] }> {
   const browser = await getBrowser();
 
-  let page: Page | null = null;
   try {
-    page = await browser.newPage();
-    activePagesCount++; // 增加活动页面计数
-    console.log(`[Puppeteer Pool] 📄 创建新页面 (活动页面数: ${activePagesCount})`);
-
-    // 🚀 清除所有 cookies，避免被豆瓣识别为同一个浏览器
-    const client = await page.target().createCDPSession();
-    await client.send('Network.clearBrowserCookies');
-    await client.send('Network.clearBrowserCache');
-    console.log(`[Puppeteer Pool] 🧹 已清除 cookies 和缓存`);
+    const page = await browser.newPage();
 
     // 🎯 增强型反bot检测 - 基于2025-2026最佳实践
     // 参考: https://www.zenrows.com/blog/bypass-bot-detection
@@ -289,26 +220,9 @@ async function _fetchPageWithPuppeteerOnce(url: string, options?: {
     // 获取 cookies
     const cookies = await page.cookies();
 
-    // 🚀 关闭页面（不关闭浏览器）
-    await page.close();
-    activePagesCount--; // 减少活动页面计数
-    console.log(`[Puppeteer Pool] 📄 关闭页面 (活动页面数: ${activePagesCount})`);
-    resetBrowserIdleTimer(); // 重置空闲计时器
-
     return { html, cookies };
-  } catch (error) {
-    // 发生错误时也要关闭页面（如果页面已创建）
-    if (page) {
-      try {
-        await page.close();
-      } catch (closeError) {
-        console.error('[Puppeteer Pool] ❌ 关闭页面失败:', closeError);
-      }
-      activePagesCount--;
-      console.log(`[Puppeteer Pool] ❌ 错误，关闭页面 (活动页面数: ${activePagesCount})`);
-      resetBrowserIdleTimer();
-    }
-    throw error;
+  } finally {
+    await browser.close();
   }
 }
 
