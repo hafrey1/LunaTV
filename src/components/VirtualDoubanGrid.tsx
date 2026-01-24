@@ -12,6 +12,7 @@ const Grid = dynamic(
   }
 );
 
+// @ts-ignore - useInfiniteLoader exists at runtime but type definitions are incomplete
 import { useInfiniteLoader } from 'react-window-infinite-loader';
 
 import { DoubanItem } from '@/lib/types';
@@ -353,45 +354,69 @@ export const VirtualDoubanGrid = React.forwardRef<VirtualDoubanGridRef, VirtualD
             />
       )}
 
-      {/* 加载更多指示器 - 固定在屏幕底部 */}
+      {/* 加载更多指示器 */}
       {isLoadingMore && (
-        <div className='fixed bottom-0 left-0 right-0 z-50 flex justify-center py-4 bg-gradient-to-t from-white/95 via-white/90 to-transparent dark:from-gray-900/95 dark:via-gray-900/90 backdrop-blur-sm'>
-          <div className='relative px-6 py-3 rounded-xl bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/40 dark:via-emerald-900/40 dark:to-teal-900/40 border border-green-200/50 dark:border-green-700/50 shadow-lg'>
+        <div className='flex justify-center mt-8 py-8'>
+          <div className='relative px-8 py-4 rounded-2xl bg-gradient-to-r from-green-50 via-emerald-50 to-teal-50 dark:from-green-900/20 dark:via-emerald-900/20 dark:to-teal-900/20 border border-green-200/50 dark:border-green-700/50 shadow-lg overflow-hidden'>
             {/* 动画背景 */}
-            <div className='absolute inset-0 bg-gradient-to-r from-green-400/10 via-emerald-400/10 to-teal-400/10 animate-pulse rounded-xl'></div>
+            <div className='absolute inset-0 bg-gradient-to-r from-green-400/10 via-emerald-400/10 to-teal-400/10 animate-pulse'></div>
 
             {/* 内容 */}
             <div className='relative flex items-center gap-3'>
               {/* 旋转圈 */}
               <div className='relative'>
-                <div className='animate-spin rounded-full h-6 w-6 border-[2px] border-green-200 dark:border-green-800'></div>
-                <div className='absolute inset-0 animate-spin rounded-full h-6 w-6 border-[2px] border-transparent border-t-green-500 dark:border-t-green-400'></div>
+                <div className='animate-spin rounded-full h-8 w-8 border-[3px] border-green-200 dark:border-green-800'></div>
+                <div className='absolute inset-0 animate-spin rounded-full h-8 w-8 border-[3px] border-transparent border-t-green-500 dark:border-t-green-400'></div>
               </div>
 
               {/* 文字 */}
-              <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>加载中...</span>
+              <div className='flex items-center gap-1'>
+                <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>加载中</span>
+                <span className='flex gap-0.5'>
+                  <span className='animate-bounce' style={{ animationDelay: '0ms' }}>.</span>
+                  <span className='animate-bounce' style={{ animationDelay: '150ms' }}>.</span>
+                  <span className='animate-bounce' style={{ animationDelay: '300ms' }}>.</span>
+                </span>
+              </div>
             </div>
           </div>
         </div>
       )}
 
-      {/* 已加载完所有内容的提示 - 固定在屏幕底部 */}
+      {/* 已加载完所有内容的提示 */}
       {!hasMore && totalItemCount > 0 && !isLoadingMore && (
-        <div className='fixed bottom-0 left-0 right-0 z-50 flex justify-center py-4 bg-gradient-to-t from-white/95 via-white/90 to-transparent dark:from-gray-900/95 dark:via-gray-900/90 backdrop-blur-sm'>
-          <div className='relative px-6 py-3 rounded-xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/40 dark:via-indigo-900/40 dark:to-purple-900/40 border border-blue-200/50 dark:border-blue-700/50 shadow-lg'>
+        <div className='flex justify-center mt-8 py-8'>
+          <div className='relative px-8 py-5 rounded-2xl bg-gradient-to-r from-blue-50 via-indigo-50 to-purple-50 dark:from-blue-900/20 dark:via-indigo-900/20 dark:to-purple-900/20 border border-blue-200/50 dark:border-blue-700/50 shadow-lg overflow-hidden'>
+            {/* 装饰背景 */}
+            <div className='absolute inset-0 bg-gradient-to-br from-blue-100/20 to-purple-100/20 dark:from-blue-800/10 dark:to-purple-800/10'></div>
+
             {/* 内容 */}
-            <div className='relative flex items-center gap-2'>
+            <div className='relative flex flex-col items-center gap-2'>
               {/* 完成图标 */}
-              <div className='w-6 h-6 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center'>
-                <svg className='w-4 h-4 text-white' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
-                  <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2.5' d='M5 13l4 4L19 7'></path>
-                </svg>
+              <div className='relative'>
+                <div className='w-12 h-12 rounded-full bg-gradient-to-br from-blue-500 to-purple-500 flex items-center justify-center shadow-lg'>
+                  {isBangumi ? (
+                    <svg className='w-7 h-7 text-white' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2' d='M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z'></path>
+                    </svg>
+                  ) : (
+                    <svg className='w-7 h-7 text-white' fill='none' stroke='currentColor' viewBox='0 0 24 24'>
+                      <path strokeLinecap='round' strokeLinejoin='round' strokeWidth='2.5' d='M5 13l4 4L19 7'></path>
+                    </svg>
+                  )}
+                </div>
+                <div className='absolute inset-0 rounded-full bg-blue-400/30 animate-ping'></div>
               </div>
 
               {/* 文字 */}
-              <span className='text-sm font-medium text-gray-700 dark:text-gray-300'>
-                {isBangumi ? `本日番剧已全部显示 (共 ${totalItemCount} 部)` : `已加载全部内容 (共 ${totalItemCount} 项)`}
-              </span>
+              <div className='text-center'>
+                <p className='text-base font-semibold text-gray-800 dark:text-gray-200 mb-1'>
+                  {isBangumi ? '本日番剧已全部显示' : '已加载全部内容'}
+                </p>
+                <p className='text-xs text-gray-600 dark:text-gray-400'>
+                  {isBangumi ? `今日共 ${totalItemCount} 部` : `共 ${totalItemCount} 项`}
+                </p>
+              </div>
             </div>
           </div>
         </div>
