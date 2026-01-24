@@ -149,6 +149,12 @@ async function _fetchPageWithPuppeteerOnce(url: string, options?: {
     activePagesCount++; // 增加活动页面计数
     console.log(`[Puppeteer Pool] 📄 创建新页面 (活动页面数: ${activePagesCount})`);
 
+    // 🚀 清除所有 cookies，避免被豆瓣识别为同一个浏览器
+    const client = await page.target().createCDPSession();
+    await client.send('Network.clearBrowserCookies');
+    await client.send('Network.clearBrowserCache');
+    console.log(`[Puppeteer Pool] 🧹 已清除 cookies 和缓存`);
+
     // 🎯 增强型反bot检测 - 基于2025-2026最佳实践
     // 参考: https://www.zenrows.com/blog/bypass-bot-detection
     // 参考: https://www.scrapingbee.com/blog/puppeteer-stealth-tutorial-with-examples/
