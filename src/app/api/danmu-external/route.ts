@@ -781,7 +781,7 @@ export async function GET(request: NextRequest) {
     };
     const errorSize = Buffer.byteLength(JSON.stringify(errorResponse), 'utf8');
 
-    await recordRequest({
+    recordRequest({
       timestamp: startTime,
       method: 'GET',
       path: '/api/danmu-external',
@@ -831,7 +831,7 @@ export async function GET(request: NextRequest) {
       };
       const responseSize = Buffer.byteLength(JSON.stringify(emptyResponse), 'utf8');
 
-      await recordRequest({
+      recordRequest({
         timestamp: startTime,
         method: 'GET',
         path: '/api/danmu-external',
@@ -928,7 +928,7 @@ export async function GET(request: NextRequest) {
     };
     const responseSize = Buffer.byteLength(JSON.stringify(successResponse), 'utf8');
 
-    await recordRequest({
+    recordRequest({
       timestamp: startTime,
       method: 'GET',
       path: '/api/danmu-external',
@@ -952,7 +952,7 @@ export async function GET(request: NextRequest) {
     };
     const errorSize = Buffer.byteLength(JSON.stringify(errorResponse), 'utf8');
 
-    await recordRequest({
+    recordRequest({
       timestamp: startTime,
       method: 'GET',
       path: '/api/danmu-external',

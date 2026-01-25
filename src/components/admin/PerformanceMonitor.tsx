@@ -71,6 +71,9 @@ export default function PerformanceMonitor() {
       if (path.startsWith(prefix)) return name;
     }
 
+    // 短剧 API 统一显示
+    if (path.startsWith('/api/shortdrama')) return '短剧 API';
+
     return path;
   };
 
@@ -80,6 +83,7 @@ export default function PerformanceMonitor() {
 
     return requests.filter((req) => {
       if (apiFilter === 'douban') return req.path.startsWith('/api/douban');
+      if (apiFilter === 'shortdrama') return req.path.startsWith('/api/shortdrama');
       if (apiFilter === 'cron') return req.path === '/api/cron';
       if (apiFilter === 'admin') return req.path.startsWith('/api/admin');
       if (apiFilter === 'series') return req.path.startsWith('/api/series');
@@ -235,6 +239,7 @@ export default function PerformanceMonitor() {
           >
             <option value='all'>全部 API</option>
             <option value='douban'>豆瓣 API</option>
+            <option value='shortdrama'>短剧 API</option>
             <option value='search'>视频搜索</option>
             <option value='list'>视频列表</option>
             <option value='detail'>视频详情</option>
