@@ -7,11 +7,16 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAuthInfoFromCookie } from '@/lib/auth';
 import { getRecentMetrics, getRecentRequests, getCurrentStatus, clearCache, startAutoCollection } from '@/lib/performance-monitor';
+import { initFetchInterceptor } from '@/lib/fetch-interceptor';
+import { getExternalTrafficStats } from '@/lib/external-traffic-monitor';
 
 export const runtime = 'nodejs';
 
 // 启动自动数据收集
 startAutoCollection();
+
+// 启动全局 fetch 拦截器（监控外部流量）
+initFetchInterceptor();
 
 /**
  * GET - 获取性能数据
@@ -38,6 +43,7 @@ export async function GET(request: NextRequest) {
     const metrics = getRecentMetrics(hours);
     const currentStatus = await getCurrentStatus();
     const recentRequests = await getRecentRequests(limit, hours);
+    const externalTraffic = await getExternalTrafficStats(hours);
 
     return NextResponse.json({
       ok: true,
@@ -45,6 +51,7 @@ export async function GET(request: NextRequest) {
         metrics,
         currentStatus,
         recentRequests,
+        externalTraffic,
       },
     });
   } catch (error) {
