@@ -1128,11 +1128,54 @@ function PlayPageClient() {
     }
   };
 
+  // 获取源权重映射
+  const fetchSourceWeights = async (): Promise<Record<string, number>> => {
+    try {
+      const response = await fetch('/api/source-weights');
+      if (!response.ok) {
+        console.warn('获取源权重失败，使用默认权重');
+        return {};
+      }
+      const data = await response.json();
+      return data.weights || {};
+    } catch (error) {
+      console.warn('获取源权重失败:', error);
+      return {};
+    }
+  };
+
+  // 按权重排序源（权重高的在前）
+  const sortSourcesByWeight = (sources: SearchResult[], weights: Record<string, number>): SearchResult[] => {
+    return [...sources].sort((a, b) => {
+      const weightA = weights[a.source] ?? 50;
+      const weightB = weights[b.source] ?? 50;
+      return weightB - weightA; // 降序排列，权重高的在前
+    });
+  };
+
+  // 设置可用源列表（先按权重排序）
+  const setAvailableSourcesWithWeight = async (sources: SearchResult[]): Promise<SearchResult[]> => {
+    if (sources.length <= 1) {
+      setAvailableSources(sources);
+      return sources;
+    }
+    const weights = await fetchSourceWeights();
+    const sortedSources = sortSourcesByWeight(sources, weights);
+    console.log('按权重排序可用源:', sortedSources.map(s => `${s.source_name}(${weights[s.source] ?? 50})`).slice(0, 5), '...');
+    setAvailableSources(sortedSources);
+    return sortedSources;
+  };
+
   // 播放源优选函数（针对旧iPad做极端保守优化）
   const preferBestSource = async (
     sources: SearchResult[]
   ): Promise<SearchResult> => {
     if (sources.length === 1) return sources[0];
+
+    // 🎯 获取源权重并按权重排序
+    const weights = await fetchSourceWeights();
+    const weightedSources = sortSourcesByWeight(sources, weights);
+    console.log('按权重排序后的源:', weightedSources.map(s => `${s.source_name}(${weights[s.source] ?? 50})`));
 
     // 使用全局统一的设备检测结果
     const _isIPad = /iPad/i.test(userAgent) || (userAgent.includes('Macintosh') && navigator.maxTouchPoints >= 1);
@@ -1143,32 +1186,38 @@ function PlayPageClient() {
     // 如果是iPad或iOS13+（包括新iPad在桌面模式下），使用极简策略避免崩溃
     if (isIOS13) {
       console.log('检测到iPad/iOS13+设备，使用无测速优选策略避免崩溃');
-      
-      // 简单的源名称优先级排序，不进行实际测速
+
+      // 直接返回权重最高的源（已按权重排序）
+      // 同时保留原来的源名称优先级作为备用排序
       const sourcePreference = [
         'ok', 'niuhu', 'ying', 'wasu', 'mgtv', 'iqiyi', 'youku', 'qq'
       ];
-      
-      const sortedSources = sources.sort((a, b) => {
-        const aIndex = sourcePreference.findIndex(name => 
+
+      const sortedSources = weightedSources.sort((a, b) => {
+        // 首先按权重排序（已经排好了）
+        const weightA = weights[a.source] ?? 50;
+        const weightB = weights[b.source] ?? 50;
+        if (weightA !== weightB) {
+          return weightB - weightA;
+        }
+
+        // 权重相同时，按源名称优先级排序
+        const aIndex = sourcePreference.findIndex(name =>
           a.source_name?.toLowerCase().includes(name)
         );
-        const bIndex = sourcePreference.findIndex(name => 
+        const bIndex = sourcePreference.findIndex(name =>
           b.source_name?.toLowerCase().includes(name)
         );
-        
-        // 如果都在优先级列表中，按优先级排序
+
         if (aIndex !== -1 && bIndex !== -1) {
           return aIndex - bIndex;
         }
-        // 如果只有一个在优先级列表中，优先选择它
         if (aIndex !== -1) return -1;
         if (bIndex !== -1) return 1;
-        
-        // 都不在优先级列表中，保持原始顺序
+
         return 0;
       });
-      
+
       console.log('iPad/iOS13+优选结果:', sortedSources.map(s => s.source_name));
       return sortedSources[0];
     }
@@ -1176,53 +1225,61 @@ function PlayPageClient() {
     // 移动设备使用轻量级测速（仅ping，不创建HLS）
     if (isMobile) {
       console.log('移动设备使用轻量级优选');
-      return await lightweightPreference(sources);
+      return await lightweightPreference(weightedSources, weights);
     }
 
     // 桌面设备使用原来的测速方法（控制并发）
-    return await fullSpeedTest(sources);
+    return await fullSpeedTest(weightedSources, weights);
   };
 
   // 轻量级优选：仅测试连通性，不创建video和HLS
-  const lightweightPreference = async (sources: SearchResult[]): Promise<SearchResult> => {
+  const lightweightPreference = async (sources: SearchResult[], weights: Record<string, number> = {}): Promise<SearchResult> => {
     console.log('开始轻量级测速，仅测试连通性');
-    
+
     const results = await Promise.all(
       sources.map(async (source) => {
         try {
           if (!source.episodes || source.episodes.length === 0) {
-            return { source, pingTime: 9999, available: false };
+            return { source, pingTime: 9999, available: false, weight: weights[source.source] ?? 50 };
           }
 
-          const episodeUrl = source.episodes.length > 1 
-            ? source.episodes[1] 
+          const episodeUrl = source.episodes.length > 1
+            ? source.episodes[1]
             : source.episodes[0];
-          
+
           // 仅测试连通性和响应时间
           const startTime = performance.now();
-          await fetch(episodeUrl, { 
-            method: 'HEAD', 
+          await fetch(episodeUrl, {
+            method: 'HEAD',
             mode: 'no-cors',
             signal: AbortSignal.timeout(3000) // 3秒超时
           });
           const pingTime = performance.now() - startTime;
-          
-          return { 
-            source, 
-            pingTime: Math.round(pingTime), 
-            available: true 
+
+          return {
+            source,
+            pingTime: Math.round(pingTime),
+            available: true,
+            weight: weights[source.source] ?? 50
           };
         } catch (error) {
           console.warn(`轻量级测速失败: ${source.source_name}`, error);
-          return { source, pingTime: 9999, available: false };
+          return { source, pingTime: 9999, available: false, weight: weights[source.source] ?? 50 };
         }
       })
     );
 
-    // 按可用性和响应时间排序
+    // 按权重分组，在同权重组内按ping时间排序
     const sortedResults = results
       .filter(r => r.available)
-      .sort((a, b) => a.pingTime - b.pingTime);
+      .sort((a, b) => {
+        // 首先按权重降序
+        if (a.weight !== b.weight) {
+          return b.weight - a.weight;
+        }
+        // 同权重按ping时间升序
+        return a.pingTime - b.pingTime;
+      });
 
     if (sortedResults.length === 0) {
       console.warn('所有源都不可用，返回第一个');
@@ -1237,20 +1294,20 @@ function PlayPageClient() {
   };
 
   // 完整测速（桌面设备）
-  const fullSpeedTest = async (sources: SearchResult[]): Promise<SearchResult> => {
+  const fullSpeedTest = async (sources: SearchResult[], weights: Record<string, number> = {}): Promise<SearchResult> => {
     // 桌面设备使用小批量并发，避免创建过多实例
     const concurrency = 3;
     // 限制最大测试数量为20个源（平衡速度和覆盖率）
     const maxTestCount = 20;
-    const topPriorityCount = 5; // 前5个优先级最高的源
+    const topPriorityCount = 5; // 前5个优先级最高的源（已按权重排序）
 
-    // 🎯 混合策略：前5个 + 随机15个
+    // 🎯 混合策略：前5个（高权重）+ 随机15个
     let sourcesToTest: SearchResult[];
     if (sources.length <= maxTestCount) {
       // 如果源总数不超过20个，全部测试
       sourcesToTest = sources;
     } else {
-      // 保留前5个（搜索结果通常已按相关性/质量排序）
+      // 保留前5个（已按权重排序，权重最高的在前）
       const prioritySources = sources.slice(0, topPriorityCount);
 
       // 从剩余源中随机选择15个
@@ -1261,7 +1318,7 @@ function PlayPageClient() {
       sourcesToTest = [...prioritySources, ...randomSources];
     }
 
-    console.log(`开始测速: 共${sources.length}个源，将测试前${topPriorityCount}个 + 随机${sourcesToTest.length - Math.min(topPriorityCount, sources.length)}个 = ${sourcesToTest.length}个`);
+    console.log(`开始测速: 共${sources.length}个源，将测试前${topPriorityCount}个高权重源 + 随机${sourcesToTest.length - Math.min(topPriorityCount, sources.length)}个 = ${sourcesToTest.length}个`);
 
     const allResults: Array<{
       source: SearchResult;
@@ -1412,26 +1469,36 @@ function PlayPageClient() {
     const minPing = validPings.length > 0 ? Math.min(...validPings) : 50;
     const maxPing = validPings.length > 0 ? Math.max(...validPings) : 1000;
 
-    // 计算每个结果的评分
-    const resultsWithScore = successfulResults.map((result) => ({
-      ...result,
-      score: calculateSourceScore(
+    // 计算每个结果的评分（结合测速结果和权重）
+    const resultsWithScore = successfulResults.map((result) => {
+      const testScore = calculateSourceScore(
         result.testResult,
         maxSpeed,
         minPing,
         maxPing
-      ),
-    }));
+      );
+      const weight = weights[result.source.source] ?? 50;
+      // 权重加成：权重每增加10分，总分增加5%
+      // 例如：权重100的源比权重50的源，总分高出25%
+      const weightBonus = 1 + (weight - 50) * 0.005;
+      const finalScore = testScore * weightBonus;
+      return {
+        ...result,
+        score: finalScore,
+        testScore,
+        weight,
+      };
+    });
 
     // 按综合评分排序，选择最佳播放源
     resultsWithScore.sort((a, b) => b.score - a.score);
 
-    console.log('播放源评分排序结果:');
+    console.log('播放源评分排序结果（含权重加成）:');
     resultsWithScore.forEach((result, index) => {
       console.log(
         `${index + 1}. ${result.source.source_name
-        } - 评分: ${result.score.toFixed(2)} (${result.testResult.quality}, ${result.testResult.loadSpeed
-        }, ${result.testResult.pingTime}ms)`
+        } - 总分: ${result.score.toFixed(2)} (测速分: ${result.testScore.toFixed(2)}, 权重: ${result.weight}) [${result.testResult.quality}, ${result.testResult.loadSpeed
+        }, ${result.testResult.pingTime}ms]`
       );
     });
 
@@ -2436,10 +2503,11 @@ function PlayPageClient() {
             finalResults = [];
           }
         }
-          
+
         console.log(`智能搜索完成，最终返回 ${finalResults.length} 个结果`);
-        setAvailableSources(finalResults);
-        return finalResults;
+        // 按权重排序后设置可用源列表
+        const sortedResults = await setAvailableSourcesWithWeight(finalResults);
+        return sortedResults;
       } catch (err) {
         console.error('智能搜索失败:', err);
         setSourceSearchError(err instanceof Error ? err.message : '搜索失败');
@@ -2471,7 +2539,7 @@ function PlayPageClient() {
         sourcesInfo = await fetchSourceDetail(currentSource, currentId);
         // 只有当短剧源有有效数据时才设置可用源列表
         if (sourcesInfo.length > 0 && sourcesInfo[0].episodes && sourcesInfo[0].episodes.length > 0) {
-          setAvailableSources(sourcesInfo);
+          await setAvailableSourcesWithWeight(sourcesInfo);
         } else {
           console.log('⚠️ 短剧源没有有效数据，不设置可用源列表');
           setAvailableSources([]);
@@ -2509,8 +2577,8 @@ function PlayPageClient() {
               );
               if (!existingShortdrama) {
                 sourcesInfo.push(...shortdramaSource);
-                // 重新设置 availableSources 以包含短剧源
-                setAvailableSources(sourcesInfo);
+                // 重新设置 availableSources 以包含短剧源（按权重排序）
+                sourcesInfo = await setAvailableSourcesWithWeight(sourcesInfo);
                 console.log('✅ 短剧源已添加到换源列表');
               } else {
                 console.log('⚠️ 短剧源已存在，跳过添加');
@@ -3760,93 +3828,114 @@ function PlayPageClient() {
               const savedOpacity = parseFloat(localStorage.getItem('danmaku_opacity') || '0.8');
               const savedMargin = JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]');
               const savedModes = JSON.parse(localStorage.getItem('danmaku_modes') || '[0, 1, 2]');
+              const savedAntiOverlap = localStorage.getItem('danmaku_antiOverlap') !== null
+                ? localStorage.getItem('danmaku_antiOverlap') === 'true'
+                : !isMobile; // 默认值：桌面端开启，移动端关闭
 
               return [
                 {
                   html: '字号',
-                  tooltip: '弹幕字号大小',
-                  selector: [
-                    { html: '12px', value: 12, default: savedFontSize === 12 },
-                    { html: '16px', value: 16, default: savedFontSize === 16 },
-                    { html: '20px', value: 20, default: savedFontSize === 20 },
-                    { html: '25px', value: 25, default: savedFontSize === 25 },
-                    { html: '30px', value: 30, default: savedFontSize === 30 },
-                    { html: '36px', value: 36, default: savedFontSize === 36 },
-                  ],
-                  onSelect: function (item: any) {
-                    localStorage.setItem('danmaku_fontSize', String(item.value));
+                  tooltip: `${savedFontSize}px`,
+                  range: [savedFontSize, 12, 40, 1],
+                  onChange: function (item: any) {
+                    const value = Math.round(item.range[0]);
+                    localStorage.setItem('danmaku_fontSize', String(value));
                     if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
                       artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        fontSize: item.value,
+                        fontSize: value,
                       });
                     }
-                    return item.html;
+                    return `${value}px`;
                   },
                 },
                 {
                   html: '速度',
-                  tooltip: '弹幕滚动速度',
-                  selector: [
-                    { html: '极慢', value: 10, default: savedSpeed === 10 },
-                    { html: '较慢', value: 7.5, default: savedSpeed === 7.5 },
-                    { html: '适中', value: 5, default: savedSpeed === 5 },
-                    { html: '较快', value: 2.5, default: savedSpeed === 2.5 },
-                    { html: '极快', value: 1, default: savedSpeed === 1 },
-                  ],
-                  onSelect: function (item: any) {
-                    localStorage.setItem('danmaku_speed', String(item.value));
+                  tooltip: `${savedSpeed.toFixed(1)}`,
+                  range: [savedSpeed, 1, 10, 0.5],
+                  onChange: function (item: any) {
+                    const value = Math.round(item.range[0] * 2) / 2; // 保留0.5精度
+                    localStorage.setItem('danmaku_speed', String(value));
                     if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
                       artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        speed: item.value,
+                        speed: value,
                       });
                     }
-                    return item.html;
+                    return `${value.toFixed(1)}`;
                   },
                 },
                 {
                   html: '透明度',
-                  tooltip: '弹幕透明度',
-                  selector: [
-                    { html: '30%', value: 0.3, default: savedOpacity === 0.3 },
-                    { html: '50%', value: 0.5, default: savedOpacity === 0.5 },
-                    { html: '70%', value: 0.7, default: savedOpacity === 0.7 },
-                    { html: '80%', value: 0.8, default: savedOpacity === 0.8 },
-                    { html: '100%', value: 1.0, default: savedOpacity === 1.0 },
-                  ],
-                  onSelect: function (item: any) {
-                    localStorage.setItem('danmaku_opacity', String(item.value));
+                  tooltip: `${Math.round(savedOpacity * 100)}%`,
+                  range: [savedOpacity, 0.1, 1.0, 0.05],
+                  onChange: function (item: any) {
+                    const value = Math.round(item.range[0] * 20) / 20; // 保留0.05精度
+                    localStorage.setItem('danmaku_opacity', String(value));
                     if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
                       artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        opacity: item.value,
+                        opacity: value,
                       });
                     }
-                    return item.html;
+                    return `${Math.round(value * 100)}%`;
                   },
                 },
                 {
-                  html: '显示区域',
-                  tooltip: '弹幕显示区域',
-                  selector: [
-                    { html: '全屏显示', value: [10, 10], default: JSON.stringify(savedMargin) === JSON.stringify([10, 10]) },
-                    { html: '顶部区域', value: [10, '75%'], default: JSON.stringify(savedMargin) === JSON.stringify([10, '75%']) },
-                    { html: '上半部分', value: [10, '50%'], default: JSON.stringify(savedMargin) === JSON.stringify([10, '50%']) },
-                    { html: '下半部分', value: ['50%', 10], default: JSON.stringify(savedMargin) === JSON.stringify(['50%', 10]) },
-                    { html: '底部区域', value: ['75%', 10], default: JSON.stringify(savedMargin) === JSON.stringify(['75%', 10]) },
-                    { html: '仅中间', value: ['25%', '25%'], default: JSON.stringify(savedMargin) === JSON.stringify(['25%', '25%']) },
+                  html: '上边距',
+                  tooltip: `${typeof savedMargin[0] === 'number' ? savedMargin[0] + 'px' : savedMargin[0]}`,
+                  range: [
+                    typeof savedMargin[0] === 'string' ? parseFloat(savedMargin[0]) : savedMargin[0],
+                    0,
+                    100,
+                    5
                   ],
-                  onSelect: function (item: any) {
-                    localStorage.setItem('danmaku_margin', JSON.stringify(item.value));
+                  onChange: function (item: any) {
+                    const topValue = Math.round(item.range[0] / 5) * 5; // 5%步长
+                    const topMargin = topValue === 0 ? 10 : `${topValue}%`;
+                    const currentMargin = JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]');
+                    const newMargin = [topMargin, currentMargin[1]];
+                    localStorage.setItem('danmaku_margin', JSON.stringify(newMargin));
                     if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
                       artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        margin: item.value,
+                        margin: newMargin,
                       });
                     }
-                    return item.html;
+                    return topValue === 0 ? '无' : `${topValue}%`;
+                  },
+                },
+                {
+                  html: '下边距',
+                  tooltip: `${typeof savedMargin[1] === 'number' ? savedMargin[1] + 'px' : savedMargin[1]}`,
+                  range: [
+                    typeof savedMargin[1] === 'string' ? parseFloat(savedMargin[1]) : savedMargin[1],
+                    0,
+                    100,
+                    5
+                  ],
+                  onChange: function (item: any) {
+                    const bottomValue = Math.round(item.range[0] / 5) * 5; // 5%步长
+                    const bottomMargin = bottomValue === 0 ? 10 : `${bottomValue}%`;
+                    const currentMargin = JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]');
+                    const newMargin = [currentMargin[0], bottomMargin];
+                    localStorage.setItem('danmaku_margin', JSON.stringify(newMargin));
+                    if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
+                      artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
+                        margin: newMargin,
+                      });
+                    }
+                    return bottomValue === 0 ? '无' : `${bottomValue}%`;
                   },
                 },
                 {
                   html: '弹幕类型',
-                  tooltip: '选择显示的弹幕类型',
+                  tooltip: (() => {
+                    // 根据 savedModes 返回对应的文本
+                    const modesStr = JSON.stringify(savedModes);
+                    if (modesStr === JSON.stringify([0, 1, 2])) return '全部显示';
+                    if (modesStr === JSON.stringify([0])) return '仅滚动';
+                    if (modesStr === JSON.stringify([0, 1])) return '滚动+顶部';
+                    if (modesStr === JSON.stringify([0, 2])) return '滚动+底部';
+                    if (modesStr === JSON.stringify([1, 2])) return '仅固定';
+                    return '全部显示'; // 默认值
+                  })(),
                   selector: [
                     { html: '全部显示', value: [0, 1, 2], default: JSON.stringify(savedModes) === JSON.stringify([0, 1, 2]) },
                     { html: '仅滚动', value: [0], default: JSON.stringify(savedModes) === JSON.stringify([0]) },
@@ -3859,6 +3948,23 @@ function PlayPageClient() {
                     if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
                       artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
                         modes: item.value,
+                      });
+                    }
+                    return item.html;
+                  },
+                },
+                {
+                  html: '防重叠',
+                  tooltip: savedAntiOverlap ? '开启' : '关闭',
+                  selector: [
+                    { html: '开启', value: true, default: savedAntiOverlap === true },
+                    { html: '关闭', value: false, default: savedAntiOverlap === false },
+                  ],
+                  onSelect: function (item: any) {
+                    localStorage.setItem('danmaku_antiOverlap', String(item.value));
+                    if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
+                      artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
+                        antiOverlap: item.value,
                       });
                     }
                     return item.html;
@@ -3983,7 +4089,9 @@ function PlayPageClient() {
                 width: 300,
 
                 // 🎯 激进优化配置 - 保持功能完整性
-                antiOverlap: devicePerformance === 'high', // 只有高性能设备开启防重叠，避免重叠计算
+                antiOverlap: localStorage.getItem('danmaku_antiOverlap') !== null
+                  ? localStorage.getItem('danmaku_antiOverlap') === 'true'
+                  : (devicePerformance === 'high'), // 默认值：高性能设备开启防重叠
                 synchronousPlayback: true, // ✅ 必须保持true！确保弹幕与视频播放速度同步
                 heatmap: false, // 关闭热力图，减少DOM计算开销
                 
