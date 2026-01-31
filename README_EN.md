@@ -358,6 +358,8 @@ This project is licensed under **CC BY-NC-SA 4.0**, with the following terms:
   - [Docker Deployment (Recommended)](#-recommended-kvrocks-storage)
   - [fnOS Deployment](#-fnos-feiniao-nas-deployment)
   - [Zeabur Deployment (Recommended)](#️-zeabur-deployment-recommended)
+  - [Hugging Face Space Deployment (Free)](#-hugging-face-space-deployment-free)
+  - [EdgeOne Pages Deployment (Free)](#-edgeone-pages-deployment-free)
   - [Vercel Deployment (Serverless)](#-vercel-deployment-serverless)
 - [Configuration File](#️-configuration-file)
 - [Environment Variables](#-environment-variables)
@@ -719,6 +721,186 @@ When a new Docker image version is released, Zeabur won't automatically update. 
 
 ---
 
+### 🤗 Hugging Face Space Deployment (Free)
+
+[Hugging Face Spaces](https://huggingface.co/spaces) offers free Docker container hosting with **2 vCPU, 16GB RAM, and 50GB storage**, perfect for personal use.
+
+#### Deployment Steps
+
+1. **Create Hugging Face Account**
+   - Visit [huggingface.co](https://huggingface.co/) and register
+
+2. **Create New Space**
+   - Visit [huggingface.co/new-space](https://huggingface.co/new-space)
+   - Enter Space name (e.g., `lunatv`)
+   - **Space SDK**: Select `Docker`
+   - **Space hardware**: Select `CPU basic` (Free)
+   - Click `Create Space`
+
+3. **Configure README.md**
+
+   Create or edit `README.md` in the Space repository root with YAML metadata:
+
+   ```yaml
+   ---
+   title: LunaTV
+   emoji: 🎬
+   colorFrom: green
+   colorTo: blue
+   sdk: docker
+   app_port: 3000
+   pinned: false
+   ---
+   ```
+
+   > 💡 **Key config**: `app_port: 3000` tells HF the app runs on port 3000
+
+4. **Create Dockerfile**
+
+   Create `Dockerfile` in the Space repository root with just one line:
+
+   ```dockerfile
+   FROM ghcr.io/szemeng76/lunatv:latest
+   ```
+
+   > 💡 This uses the official LunaTV Docker image directly, no build required
+
+5. **Configure Environment Variables (Secrets)**
+
+   On Space page, click `Settings` > `Variables and secrets`, add these Secrets:
+
+   | Variable | Description | Example |
+   |----------|-------------|---------|
+   | `USERNAME` | Admin username | `admin` |
+   | `PASSWORD` | Admin password | `your_secure_password` |
+   | `NEXT_PUBLIC_STORAGE_TYPE` | Storage type | `upstash` |
+   | `UPSTASH_URL` | Upstash REST URL | `https://xxx.upstash.io` |
+   | `UPSTASH_TOKEN` | Upstash Token | `AxxxQ==` |
+   | `DISABLE_HERO_TRAILER` | Disable homepage trailer | `true` |
+
+   > ⚠️ **Note**: HF Space has no persistent storage, must use external database like Upstash
+   >
+   > 💡 **Recommended**: Set `DISABLE_HERO_TRAILER=true` to disable homepage trailer, as trailer URLs expire periodically and platforms without persistent storage cannot cache videos, requiring re-download on every refresh
+
+6. **Wait for Deployment**
+   - After committing files, HF will automatically pull the image and start the container
+   - Once deployed, visit `https://huggingface.co/spaces/your-username/lunatv`
+
+#### 📁 Complete File Structure
+
+```
+your-space/
+├── README.md      # Contains YAML metadata
+└── Dockerfile     # FROM ghcr.io/szemeng76/lunatv:latest
+```
+
+#### ✨ Hugging Face Space Advantages
+
+- ✅ **Completely Free**: 2 vCPU, 16GB RAM, 50GB storage
+- ✅ **No Server Required**: Hosted on HF cloud
+- ✅ **Auto HTTPS**: Built-in SSL certificate
+- ✅ **Simple Deployment**: Only two files needed
+- ✅ **Official Image**: No build required, direct pull
+
+#### ⚠️ Hugging Face Space Considerations
+
+- **No Persistent Storage**: Must use external database like Upstash
+- **Cold Start**: First access after long idle period is slow (~30-60 seconds)
+- **48-hour Sleep**: Free tier sleeps after 48 hours of inactivity, restarts on next access
+- **Public Repository**: Space repository is public by default, except Secrets
+- **Traffic Limits**: Free tier has traffic limits, sufficient for personal use
+
+#### 🔗 Related Links
+
+- [Hugging Face Spaces Docs](https://huggingface.co/docs/hub/spaces)
+- [Docker Spaces Docs](https://huggingface.co/docs/hub/spaces-sdks-docker)
+- [Upstash Free Redis](https://upstash.com/)
+
+---
+
+### 🌐 EdgeOne Pages Deployment (Free)
+
+[EdgeOne Pages](https://edgeone.ai/products/pages) is Tencent Cloud's edge computing platform, similar to Vercel, supporting Next.js SSR/SSG/ISR deployment, ideal for users in China.
+
+#### Deployment Steps
+
+1. **Prerequisites**
+   - Register an [EdgeOne](https://edgeone.ai/) account
+   - Create a Redis instance on [Upstash](https://upstash.com/) (EdgeOne Pages has no persistent storage)
+   - Fork this project to your GitHub/GitLab account
+
+2. **Create Pages Project**
+   - Login to EdgeOne Console
+   - Go to "Pages" > "Create Project"
+   - Select "Connect Git Repository"
+   - Authorize and select your forked LunaTV repository
+
+3. **Configure Build Settings**
+   - **Framework Preset**: Select `Next.js`
+   - **Build Command**: `pnpm build` (or keep default)
+   - **Output Directory**: `.next` (default)
+   - **Node.js Version**: `20` (recommended)
+
+4. **Configure Environment Variables**
+
+   Add the following environment variables in project settings:
+
+   ```env
+   # Required: Admin account
+   USERNAME=admin
+   PASSWORD=your_secure_password
+
+   # Required: Storage configuration (must use Upstash)
+   NEXT_PUBLIC_STORAGE_TYPE=upstash
+   UPSTASH_URL=https://your-redis-instance.upstash.io
+   UPSTASH_TOKEN=AxxxxxxxxxxxxxxxxxxxxxxxxxxxQ==
+
+   # Recommended: Disable homepage trailer (recommended for platforms without persistent storage)
+   DISABLE_HERO_TRAILER=true
+
+   # Optional: Site configuration
+   SITE_BASE=https://your-project.edgeone.app
+   NEXT_PUBLIC_SITE_NAME=LunaTV Enhanced
+
+   # Optional: Douban proxy configuration (recommended)
+   NEXT_PUBLIC_DOUBAN_PROXY_TYPE=cmliussss-cdn-tencent
+   NEXT_PUBLIC_DOUBAN_IMAGE_PROXY_TYPE=cmliussss-cdn-tencent
+   ```
+
+5. **Deploy Project**
+   - Click "Deploy" button
+   - Wait for build to complete (first time ~3-5 minutes)
+   - After deployment, you'll get a `xxx.edgeone.app` domain
+
+6. **Bind Custom Domain (Optional)**
+   - Click "Domains" in project settings
+   - Add custom domain and configure DNS resolution
+
+#### ✨ EdgeOne Pages Advantages
+
+- ✅ **China-Friendly**: Tencent Cloud edge nodes, fast access in China
+- ✅ **Generous Free Tier**: 3M Edge Functions requests, 1M Cloud Functions requests, 500 builds per month, unlimited traffic
+- ✅ **Auto HTTPS**: Free SSL certificate
+- ✅ **Git Auto Deploy**: Push code triggers automatic build
+- ✅ **Next.js SSR Support**: Full server-side rendering support
+
+#### ⚠️ EdgeOne Pages Considerations
+
+- **No Docker Support**: EdgeOne Pages is serverless, only supports source code build deployment
+- **Must Use Upstash**: No persistent filesystem, requires external database
+- **Function Execution Limits**: Single request has execution time limit (typically 30 seconds)
+- **No Video Caching**: No local filesystem, video caching feature unavailable
+- **Build Resource Limits**: Free tier has build time and memory limits
+
+#### 🔗 Related Links
+
+- [EdgeOne Pages Pricing](https://pages.edgeone.ai/pricing)
+- [EdgeOne Pages Docs (International)](https://edgeone.ai/zh/document/160427672961769472)
+- [EdgeOne Pages Docs (China)](https://cloud.tencent.com/document/product/1552/127366)
+- [Upstash Free Redis](https://upstash.com/)
+
+---
+
 ## 🌐 Vercel Deployment (Serverless)
 
 ### Vercel + Upstash Solution
@@ -876,6 +1058,14 @@ You can also enter specific content like "Harry Potter", which works the same as
 | `UPSTASH_URL`     | Upstash endpoint       | `https://xxx.upstash.io`       |
 | `UPSTASH_TOKEN`   | Upstash Token          | `AxxxxxxxxxxxxxxxxxxxxxxxxxxxQ==` |
 
+> 💡 **Redis-Compatible Services**: `REDIS_URL` supports all Redis protocol compatible services, including:
+> - Self-hosted Redis / KVRocks
+> - [Redis Cloud](https://redis.io/cloud/) - Official cloud service, free 30MB
+> - [Aiven Valkey](https://aiven.io/valkey) - Free 1GB, Redis 7.2 compatible
+> - [Northflank](https://northflank.com/dbaas/managed-redis) - Free 256MB
+>
+> ⚠️ **Use Upstash for Vercel deployments**: Vercel Serverless functions are stateless and may cold-start new instances on each request. TCP-based Redis services (Redis Cloud, Aiven, Northflank, etc.) will experience connection pool failures, high cold-start latency, and connection exhaustion in this environment. Upstash uses HTTP REST API, which is naturally suited for Serverless environments and is the only recommended storage for Vercel deployments.
+
 ### Optional Configuration
 
 | Variable                                | Description              | Default     | Options                    |
@@ -890,6 +1080,12 @@ You can also enter specific content like "Harry Potter", which works the same as
 | `NEXT_PUBLIC_DOUBAN_IMAGE_PROXY`        | Custom image proxy       | Empty       | URL prefix                 |
 | `NEXT_PUBLIC_DISABLE_YELLOW_FILTER`     | Disable adult filter     | `false`     | `true` / `false`           |
 | `NEXT_PUBLIC_FLUID_SEARCH`              | Streaming search output  | `true`      | `true` / `false`           |
+| `DISABLE_HERO_TRAILER`                  | Disable hero trailer     | `false`     | `true` / `false`           |
+
+> 💡 **DISABLE_HERO_TRAILER**: Hero banner trailers consume significant bandwidth, and trailer URLs contain timestamps that expire periodically.
+> - **Vercel**: Automatically disabled (no configuration needed)
+> - **Docker/VPS (with persistent volumes)**: No need to disable, videos are cached locally (`VIDEO_CACHE_DIR`), auto-refreshes and re-caches when URL expires
+> - **ClawCloud, HF Space, EdgeOne Pages and other non-persistent platforms**: Recommend setting `DISABLE_HERO_TRAILER=true`, as videos cannot be cached and must be re-downloaded on every refresh when URLs expire
 
 ### Douban Proxy Options
 
