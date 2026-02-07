@@ -30,6 +30,7 @@ import SourceSwitchDialog from '@/components/play/SourceSwitchDialog';
 import OwnerChangeDialog from '@/components/play/OwnerChangeDialog';
 import VideoCoverDisplay from '@/components/play/VideoCoverDisplay';
 import PlayErrorDisplay from '@/components/play/PlayErrorDisplay';
+import DanmuSettingsPanel from '@/components/play/DanmuSettingsPanel';
 import artplayerPluginChromecast from '@/lib/artplayer-plugin-chromecast';
 import artplayerPluginLiquidGlass from '@/lib/artplayer-plugin-liquid-glass';
 import { ClientCache } from '@/lib/client-cache';
@@ -134,6 +135,9 @@ function PlayPageClient() {
   const [isSkipSettingOpen, setIsSkipSettingOpen] = useState(false);
   const [currentPlayTime, setCurrentPlayTime] = useState(0);
   const [videoDuration, setVideoDuration] = useState(0);
+
+  // 弹幕设置面板状态
+  const [isDanmuSettingsPanelOpen, setIsDanmuSettingsPanelOpen] = useState(false);
 
   // 下载选集面板状态
   const [showDownloadEpisodeSelector, setShowDownloadEpisodeSelector] = useState(false);
@@ -344,6 +348,10 @@ function PlayPageClient() {
   const {
     externalDanmuEnabled,
     setExternalDanmuEnabled,
+    danmuList, // 弹幕列表state（用于显示弹幕数量）
+    loading: danmuLoading, // 加载状态（state）
+    loadMeta: danmuLoadMeta, // 加载元数据
+    error: danmuError, // 错误状态
     loadExternalDanmu,
     handleDanmuOperationOptimized,
     externalDanmuEnabledRef,
@@ -2245,7 +2253,7 @@ function PlayPageClient() {
         isStop: artPlayerRef.current.plugins.artplayerPluginDanmuku.isStop,
         option: artPlayerRef.current.plugins.artplayerPluginDanmuku.option
       };
-      
+
       // 使用防抖处理弹幕重新加载
       episodeSwitchTimeoutRef.current = setTimeout(async () => {
         try {
@@ -2254,27 +2262,27 @@ function PlayPageClient() {
             console.warn('⚠️ 集数切换后弹幕插件不存在，跳过弹幕加载');
             return;
           }
-          
-          const externalDanmu = await loadExternalDanmu(); // 这里会检查开关状态
-          console.log('🔄 集数变化后外部弹幕加载结果:', externalDanmu);
-          
+
+          const result = await loadExternalDanmu(); // 这里会检查开关状态，返回 { count, data }
+          console.log('🔄 集数变化后外部弹幕加载结果:', result.count, '条');
+
           // 再次确认插件状态
           if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
             const plugin = artPlayerRef.current.plugins.artplayerPluginDanmuku;
-            
-            if (externalDanmu.length > 0) {
-              console.log('✅ 向播放器插件重新加载弹幕数据:', externalDanmu.length, '条');
-              plugin.load(externalDanmu);
-              
+
+            if (result.count > 0) {
+              console.log('✅ 向播放器插件重新加载弹幕数据:', result.count, '条');
+              plugin.load(result.data);
+
               // 恢复弹幕插件的状态
               if (danmuPluginStateRef.current) {
                 if (!danmuPluginStateRef.current.isHide) {
                   plugin.show();
                 }
               }
-              
+
               if (artPlayerRef.current) {
-                artPlayerRef.current.notice.show = `已加载 ${externalDanmu.length} 条弹幕`;
+                artPlayerRef.current.notice.show = `已加载 ${result.count} 条弹幕`;
               }
             } else {
               console.log('📭 集数变化后没有弹幕数据可加载');
@@ -2856,9 +2864,9 @@ function PlayPageClient() {
 
           try {
             const startTime = performance.now();
-            const danmuData = await loadExternalDanmu();
+            const result = await loadExternalDanmu();
 
-            if (danmuData.length > 0 && artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
+            if (result.count > 0 && artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
               const plugin = artPlayerRef.current.plugins.artplayerPluginDanmuku;
 
               // 🚀 确保在加载新弹幕前完全清空旧弹幕
@@ -2867,17 +2875,17 @@ function PlayPageClient() {
               console.log('🧹 换源后已清空旧弹幕，准备加载新弹幕');
 
               // 🚀 优化大量弹幕的加载：分批处理，减少阻塞
-              if (danmuData.length > 1000) {
-                console.log(`📊 检测到大量弹幕 (${danmuData.length}条)，启用分批加载`);
+              if (result.count > 1000) {
+                console.log(`📊 检测到大量弹幕 (${result.count}条)，启用分批加载`);
 
                 // 先加载前500条，快速显示
-                const firstBatch = danmuData.slice(0, 500);
+                const firstBatch = result.data.slice(0, 500);
                 plugin.load(firstBatch);
 
                 // 剩余弹幕分批异步加载，避免阻塞
                 const remainingBatches = [];
-                for (let i = 500; i < danmuData.length; i += 300) {
-                  remainingBatches.push(danmuData.slice(i, i + 300));
+                for (let i = 500; i < result.data.length; i += 300) {
+                  remainingBatches.push(result.data.slice(i, i + 300));
                 }
 
                 // 使用requestIdleCallback分批加载剩余弹幕
@@ -2895,8 +2903,8 @@ function PlayPageClient() {
                 console.log(`⚡ 分批加载完成: 首批${firstBatch.length}条 + ${remainingBatches.length}个后续批次`);
               } else {
                 // 弹幕数量较少，正常加载
-                plugin.load(danmuData);
-                console.log(`✅ 换源后弹幕加载完成: ${danmuData.length} 条`);
+                plugin.load(result.data);
+                console.log(`✅ 换源后弹幕加载完成: ${result.count} 条`);
               }
 
               const loadTime = performance.now() - startTime;
@@ -3821,158 +3829,18 @@ function PlayPageClient() {
           {
             name: '弹幕设置',
             html: '弹幕设置',
+            tooltip: '打开弹幕设置面板',
             icon: '<svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><line x1="2" y1="12" x2="22" y2="12"></line><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path></svg>',
-            selector: (() => {
-              // 从 localStorage 读取保存的值
-              const savedFontSize = parseInt(localStorage.getItem('danmaku_fontSize') || '25');
-              const savedSpeed = parseFloat(localStorage.getItem('danmaku_speed') || '5');
-              const savedOpacity = parseFloat(localStorage.getItem('danmaku_opacity') || '0.8');
-              const savedMargin = JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]');
-              const savedModes = JSON.parse(localStorage.getItem('danmaku_modes') || '[0, 1, 2]');
-              const savedAntiOverlap = localStorage.getItem('danmaku_antiOverlap') !== null
-                ? localStorage.getItem('danmaku_antiOverlap') === 'true'
-                : !isMobile; // 默认值：桌面端开启，移动端关闭
-
-              return [
-                {
-                  html: '字号',
-                  tooltip: `${savedFontSize}px`,
-                  range: [savedFontSize, 12, 40, 1],
-                  onChange: function (item: any) {
-                    const value = Math.round(item.range[0]);
-                    localStorage.setItem('danmaku_fontSize', String(value));
-                    if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-                      artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        fontSize: value,
-                      });
-                    }
-                    return `${value}px`;
-                  },
-                },
-                {
-                  html: '速度',
-                  tooltip: `${savedSpeed.toFixed(1)}`,
-                  range: [savedSpeed, 1, 10, 0.5],
-                  onChange: function (item: any) {
-                    const value = Math.round(item.range[0] * 2) / 2; // 保留0.5精度
-                    localStorage.setItem('danmaku_speed', String(value));
-                    if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-                      artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        speed: value,
-                      });
-                    }
-                    return `${value.toFixed(1)}`;
-                  },
-                },
-                {
-                  html: '透明度',
-                  tooltip: `${Math.round(savedOpacity * 100)}%`,
-                  range: [savedOpacity, 0.1, 1.0, 0.05],
-                  onChange: function (item: any) {
-                    const value = Math.round(item.range[0] * 20) / 20; // 保留0.05精度
-                    localStorage.setItem('danmaku_opacity', String(value));
-                    if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-                      artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        opacity: value,
-                      });
-                    }
-                    return `${Math.round(value * 100)}%`;
-                  },
-                },
-                {
-                  html: '上边距',
-                  tooltip: `${typeof savedMargin[0] === 'number' ? savedMargin[0] + 'px' : savedMargin[0]}`,
-                  range: [
-                    typeof savedMargin[0] === 'string' ? parseFloat(savedMargin[0]) : savedMargin[0],
-                    0,
-                    100,
-                    5
-                  ],
-                  onChange: function (item: any) {
-                    const topValue = Math.round(item.range[0] / 5) * 5; // 5%步长
-                    const topMargin = topValue === 0 ? 10 : `${topValue}%`;
-                    const currentMargin = JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]');
-                    const newMargin = [topMargin, currentMargin[1]];
-                    localStorage.setItem('danmaku_margin', JSON.stringify(newMargin));
-                    if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-                      artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        margin: newMargin,
-                      });
-                    }
-                    return topValue === 0 ? '无' : `${topValue}%`;
-                  },
-                },
-                {
-                  html: '下边距',
-                  tooltip: `${typeof savedMargin[1] === 'number' ? savedMargin[1] + 'px' : savedMargin[1]}`,
-                  range: [
-                    typeof savedMargin[1] === 'string' ? parseFloat(savedMargin[1]) : savedMargin[1],
-                    0,
-                    100,
-                    5
-                  ],
-                  onChange: function (item: any) {
-                    const bottomValue = Math.round(item.range[0] / 5) * 5; // 5%步长
-                    const bottomMargin = bottomValue === 0 ? 10 : `${bottomValue}%`;
-                    const currentMargin = JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]');
-                    const newMargin = [currentMargin[0], bottomMargin];
-                    localStorage.setItem('danmaku_margin', JSON.stringify(newMargin));
-                    if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-                      artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        margin: newMargin,
-                      });
-                    }
-                    return bottomValue === 0 ? '无' : `${bottomValue}%`;
-                  },
-                },
-                {
-                  html: '弹幕类型',
-                  tooltip: (() => {
-                    // 根据 savedModes 返回对应的文本
-                    const modesStr = JSON.stringify(savedModes);
-                    if (modesStr === JSON.stringify([0, 1, 2])) return '全部显示';
-                    if (modesStr === JSON.stringify([0])) return '仅滚动';
-                    if (modesStr === JSON.stringify([0, 1])) return '滚动+顶部';
-                    if (modesStr === JSON.stringify([0, 2])) return '滚动+底部';
-                    if (modesStr === JSON.stringify([1, 2])) return '仅固定';
-                    return '全部显示'; // 默认值
-                  })(),
-                  selector: [
-                    { html: '全部显示', value: [0, 1, 2], default: JSON.stringify(savedModes) === JSON.stringify([0, 1, 2]) },
-                    { html: '仅滚动', value: [0], default: JSON.stringify(savedModes) === JSON.stringify([0]) },
-                    { html: '滚动+顶部', value: [0, 1], default: JSON.stringify(savedModes) === JSON.stringify([0, 1]) },
-                    { html: '滚动+底部', value: [0, 2], default: JSON.stringify(savedModes) === JSON.stringify([0, 2]) },
-                    { html: '仅固定', value: [1, 2], default: JSON.stringify(savedModes) === JSON.stringify([1, 2]) },
-                  ],
-                  onSelect: function (item: any) {
-                    localStorage.setItem('danmaku_modes', JSON.stringify(item.value));
-                    if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-                      artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        modes: item.value,
-                      });
-                    }
-                    return item.html;
-                  },
-                },
-                {
-                  html: '防重叠',
-                  tooltip: savedAntiOverlap ? '开启' : '关闭',
-                  selector: [
-                    { html: '开启', value: true, default: savedAntiOverlap === true },
-                    { html: '关闭', value: false, default: savedAntiOverlap === false },
-                  ],
-                  onSelect: function (item: any) {
-                    localStorage.setItem('danmaku_antiOverlap', String(item.value));
-                    if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-                      artPlayerRef.current.plugins.artplayerPluginDanmuku.config({
-                        antiOverlap: item.value,
-                      });
-                    }
-                    return item.html;
-                  },
-                },
-              ];
-            })(),
+            // 🎨 点击式按钮，打开美化的弹幕设置面板
+            onClick: function () {
+              setIsDanmuSettingsPanelOpen(true);
+              // 关闭settings菜单
+              if (artPlayerRef.current) {
+                artPlayerRef.current.setting.show = false;
+              }
+              // ✅ 必须返回tooltip文本，否则ArtPlayer会设置为undefined
+              return '打开弹幕设置面板';
+            },
           },
           ...(webGPUSupported ? [
             {
@@ -4225,6 +4093,8 @@ function PlayPageClient() {
           // 其他浏览器：不显示 Chromecast（不支持 Cast API）
           ...(isChrome && !isIOS ? [
             artplayerPluginChromecast({
+              title: videoTitle ? `${videoTitle}${currentEpisodeIndex >= 0 ? ` - 第${currentEpisodeIndex + 1}集` : ''}` : undefined,
+              poster: videoCover || undefined,
               onStateChange: (state) => {
                 console.log('Chromecast state changed:', state);
               },
@@ -4233,6 +4103,9 @@ function PlayPageClient() {
               },
               onCastStart: () => {
                 console.log('Chromecast started');
+              },
+              onCastEnd: () => {
+                console.log('Chromecast ended');
               },
               onError: (error) => {
                 console.error('Chromecast error:', error);
@@ -4708,7 +4581,7 @@ function PlayPageClient() {
             }
           }, 2000); // 延迟2秒确保弹幕插件完全初始化
         };
-        
+
         // 启用移动端弹幕配置切换
         addMobileDanmakuToggle();
 
@@ -4716,14 +4589,14 @@ function PlayPageClient() {
         console.log('播放器已就绪，开始加载外部弹幕');
         setTimeout(async () => {
           try {
-            const externalDanmu = await loadExternalDanmu(); // 这里会检查开关状态
-            console.log('外部弹幕加载结果:', externalDanmu);
-            
+            const result = await loadExternalDanmu(); // 这里会检查开关状态，返回 { count, data }
+            console.log('外部弹幕加载结果:', result.count, '条');
+
             if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
-              if (externalDanmu.length > 0) {
-                console.log('向播放器插件加载弹幕数据:', externalDanmu.length, '条');
-                artPlayerRef.current.plugins.artplayerPluginDanmuku.load(externalDanmu);
-                artPlayerRef.current.notice.show = `已加载 ${externalDanmu.length} 条弹幕`;
+              if (result.count > 0) {
+                console.log('向播放器插件加载弹幕数据:', result.count, '条');
+                artPlayerRef.current.plugins.artplayerPluginDanmuku.load(result.data);
+                artPlayerRef.current.notice.show = `已加载 ${result.count} 条弹幕`;
               } else {
                 console.log('没有弹幕数据可加载');
                 artPlayerRef.current.notice.show = '暂无弹幕数据';
@@ -4741,7 +4614,7 @@ function PlayPageClient() {
           localStorage.setItem('danmaku_visible', 'true');
           console.log('弹幕显示状态已保存');
         });
-        
+
         artPlayerRef.current.on('artplayerPluginDanmuku:hide', () => {
           localStorage.setItem('danmaku_visible', 'false');
           console.log('弹幕隐藏状态已保存');
@@ -5445,6 +5318,96 @@ function PlayPageClient() {
         episode={pendingOwnerChange?.episode || 0}
         onConfirm={confirmFollowOwner}
         onReject={rejectFollowOwner}
+      />
+
+      {/* 🎨 美化的弹幕设置面板 */}
+      <DanmuSettingsPanel
+        isOpen={isDanmuSettingsPanelOpen}
+        onClose={() => setIsDanmuSettingsPanelOpen(false)}
+        settings={{
+          enabled: externalDanmuEnabled, // 启用弹幕主开关
+          fontSize: parseInt(localStorage.getItem('danmaku_fontSize') || '25'),
+          speed: parseFloat(localStorage.getItem('danmaku_speed') || '5'),
+          opacity: parseFloat(localStorage.getItem('danmaku_opacity') || '0.8'),
+          margin: JSON.parse(localStorage.getItem('danmaku_margin') || '[10, "75%"]'),
+          modes: JSON.parse(localStorage.getItem('danmaku_modes') || '[0, 1, 2]') as Array<0 | 1 | 2>,
+          antiOverlap: localStorage.getItem('danmaku_antiOverlap') !== null
+            ? localStorage.getItem('danmaku_antiOverlap') === 'true'
+            : true, // 默认开启防重叠
+          visible: localStorage.getItem('danmaku_visible') !== 'false',
+        }}
+        matchInfo={
+          detail?.title && currentEpisodeIndex >= 0
+            ? {
+                animeTitle: detail.title,
+                episodeTitle: `第 ${currentEpisodeIndex + 1} 集`,
+              }
+            : null
+        }
+        onSettingsChange={(newSettings) => {
+          // 更新启用状态
+          if (newSettings.enabled !== undefined) {
+            handleDanmuOperationOptimized(newSettings.enabled);
+          }
+
+          // 更新 localStorage
+          if (newSettings.fontSize !== undefined) {
+            localStorage.setItem('danmaku_fontSize', String(newSettings.fontSize));
+          }
+          if (newSettings.speed !== undefined) {
+            localStorage.setItem('danmaku_speed', String(newSettings.speed));
+          }
+          if (newSettings.opacity !== undefined) {
+            localStorage.setItem('danmaku_opacity', String(newSettings.opacity));
+          }
+          if (newSettings.margin !== undefined) {
+            localStorage.setItem('danmaku_margin', JSON.stringify(newSettings.margin));
+          }
+          if (newSettings.modes !== undefined) {
+            localStorage.setItem('danmaku_modes', JSON.stringify(newSettings.modes));
+          }
+          if (newSettings.antiOverlap !== undefined) {
+            localStorage.setItem('danmaku_antiOverlap', String(newSettings.antiOverlap));
+          }
+          if (newSettings.visible !== undefined) {
+            localStorage.setItem('danmaku_visible', String(newSettings.visible));
+          }
+
+          // 实时更新弹幕插件配置
+          if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
+            artPlayerRef.current.plugins.artplayerPluginDanmuku.config(newSettings);
+
+            // 处理显示/隐藏
+            if (newSettings.visible !== undefined) {
+              if (newSettings.visible) {
+                artPlayerRef.current.plugins.artplayerPluginDanmuku.show();
+              } else {
+                artPlayerRef.current.plugins.artplayerPluginDanmuku.hide();
+              }
+            }
+          }
+
+          // 强制重新渲染面板以显示新值
+          setIsDanmuSettingsPanelOpen(false);
+          setTimeout(() => setIsDanmuSettingsPanelOpen(true), 50);
+        }}
+        danmuCount={danmuList.length} // 使用state而不是ref，确保React能追踪变化
+        loading={danmuLoading}
+        loadMeta={danmuLoadMeta}
+        error={danmuError}
+        onReload={async () => {
+          // 重新加载外部弹幕（强制刷新）
+          const result = await loadExternalDanmu({ force: true });
+          if (artPlayerRef.current?.plugins?.artplayerPluginDanmuku) {
+            artPlayerRef.current.plugins.artplayerPluginDanmuku.load(result.data);
+            if (result.count > 0) {
+              artPlayerRef.current.notice.show = `已加载 ${result.count} 条弹幕`;
+            } else {
+              artPlayerRef.current.notice.show = '暂无弹幕数据';
+            }
+          }
+          return result.count;
+        }}
       />
       </PageLayout>
 
