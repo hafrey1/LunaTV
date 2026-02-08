@@ -5445,6 +5445,7 @@ function PlayPageClient() {
         loading={danmuLoading}
         loadMeta={danmuLoadMeta}
         error={danmuError}
+        playerContainer={artRef.current}
         onReload={async () => {
           // 重新加载外部弹幕（强制刷新）
           const result = await loadExternalDanmu({ force: true });
