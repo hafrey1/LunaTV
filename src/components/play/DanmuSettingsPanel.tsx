@@ -12,6 +12,7 @@ import {
   Info,
 } from 'lucide-react';
 import { memo, useCallback, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 // ============================================================================
 // Types
@@ -61,6 +62,8 @@ interface DanmuSettingsPanelProps {
   loadMeta?: DanmuLoadMeta;
   /** 错误信息 */
   error?: Error | null;
+  /** 播放器容器元素（用于全屏时渲染） */
+  playerContainer?: HTMLElement | null;
 }
 
 // ============================================================================
@@ -117,6 +120,7 @@ export const DanmuSettingsPanel = memo(function DanmuSettingsPanel({
   matchInfo,
   loadMeta,
   error,
+  playerContainer,
 }: DanmuSettingsPanelProps) {
   const panelRef = useRef<HTMLDivElement>(null);
   const [isVisible, setIsVisible] = useState(false);
@@ -220,7 +224,8 @@ export const DanmuSettingsPanel = memo(function DanmuSettingsPanel({
 
   if (!isOpen) return null;
 
-  return (
+  // 面板内容
+  const panelContent = (
     <div
       ref={panelRef}
       className={`fixed right-4 bottom-20 z-[9999] w-80 overflow-hidden transition-all ${
@@ -231,6 +236,11 @@ export const DanmuSettingsPanel = memo(function DanmuSettingsPanel({
         isVisible ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-2'
       }`}
       style={{
+        // 🔧 重置 ArtPlayer 继承的样式
+        fontSize: 'initial',
+        lineHeight: 'initial',
+        textShadow: 'none',
+        fontFamily: 'inherit',
         // 🎨 多层深度阴影（Apple风格）
         boxShadow: `
           0 2px 8px rgba(0, 0, 0, 0.1),
@@ -811,6 +821,14 @@ export const DanmuSettingsPanel = memo(function DanmuSettingsPanel({
       `}</style>
     </div>
   );
+
+  // 如果有播放器容器且在全屏模式，使用 Portal 渲染到播放器容器内
+  // 否则渲染到 body（普通模式）
+  if (playerContainer) {
+    return createPortal(panelContent, playerContainer);
+  }
+
+  return panelContent;
 });
 
 export default DanmuSettingsPanel;

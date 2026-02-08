@@ -461,6 +461,39 @@ function PlayPageClient() {
       }
 
       try {
+        // 修复anime4k-webgpu库的buffer size限制问题
+        // 在全局层面patch requestAdapter，确保所有adapter都有正确的limits
+        const originalRequestAdapter = (navigator as any).gpu.requestAdapter.bind((navigator as any).gpu);
+
+        (navigator as any).gpu.requestAdapter = async (options?: any) => {
+          const adapter = await originalRequestAdapter(options);
+          if (!adapter) return adapter;
+
+          // 保存原始的requestDevice方法
+          const originalRequestDevice = adapter.requestDevice.bind(adapter);
+
+          // 重写requestDevice方法，添加必要的buffer size限制
+          adapter.requestDevice = async (descriptor?: any) => {
+            const adapterLimits = adapter.limits;
+
+            // 合并用户提供的descriptor和我们需要的limits
+            const enhancedDescriptor = {
+              ...descriptor,
+              requiredLimits: {
+                ...descriptor?.requiredLimits,
+                // 使用adapter支持的最大值，但不超过2GB
+                maxBufferSize: Math.min(adapterLimits.maxBufferSize || 2147483648, 2147483648),
+                maxStorageBufferBindingSize: Math.min(adapterLimits.maxStorageBufferBindingSize || 1073741824, 1073741824),
+              }
+            };
+
+            console.log('WebGPU设备请求配置:', enhancedDescriptor.requiredLimits);
+            return originalRequestDevice(enhancedDescriptor);
+          };
+
+          return adapter;
+        };
+
         const adapter = await (navigator as any).gpu.requestAdapter();
         if (!adapter) {
           setWebGPUSupported(false);
@@ -470,6 +503,10 @@ function PlayPageClient() {
 
         setWebGPUSupported(true);
         console.log('WebGPU支持检测：✅ 支持');
+        console.log('Adapter limits:', {
+          maxBufferSize: adapter.limits.maxBufferSize,
+          maxStorageBufferBindingSize: adapter.limits.maxStorageBufferBindingSize
+        });
       } catch (err) {
         setWebGPUSupported(false);
         console.log('WebGPU不支持：检测失败', err);
@@ -1081,52 +1118,65 @@ function PlayPageClient() {
 
       console.log('搜索演员作品:', celebrityName);
 
-      // 使用豆瓣搜索API（通过cmliussss CDN）
-      const searchUrl = `https://movie.douban.cmliussss.net/j/search_subjects?type=movie&tag=${encodeURIComponent(celebrityName)}&sort=recommend&page_limit=20&page_start=0`;
+      // 三级 fallback：豆瓣通用搜索 -> 豆瓣API -> TMDB
+      let works: any[] = [];
+      let source = '';
 
-      const response = await fetch(searchUrl);
-      const data = await response.json();
+      // 1. 豆瓣通用搜索（主用，数据最全）
+      try {
+        const response = await fetch(`/api/douban/celebrity-works?name=${encodeURIComponent(celebrityName)}&limit=20`);
+        const data = await response.json();
+        if (data.success && data.works && data.works.length > 0) {
+          works = data.works;
+          source = 'douban-search';
+          console.log(`找到 ${works.length} 部 ${celebrityName} 的作品（豆瓣通用搜索）`);
+        }
+      } catch (e) {
+        console.warn('豆瓣通用搜索失败:', e);
+      }
 
-      if (data.subjects && data.subjects.length > 0) {
-        const works = data.subjects.map((item: any) => ({
-          id: item.id,
-          title: item.title,
-          poster: item.cover,
-          rate: item.rate,
-          year: item.url?.match(/\/subject\/(\d+)\//)?.[1] || '',
-          source: 'douban'
-        }));
+      // 2. 豆瓣 API（备用）
+      if (works.length === 0) {
+        console.log('豆瓣通用搜索无结果，尝试豆瓣API...');
+        try {
+          const apiResponse = await fetch(`/api/douban/celebrity-works?name=${encodeURIComponent(celebrityName)}&limit=20&mode=api`);
+          const apiData = await apiResponse.json();
+          if (apiData.success && apiData.works && apiData.works.length > 0) {
+            works = apiData.works;
+            source = 'douban-api';
+            console.log(`找到 ${works.length} 部 ${celebrityName} 的作品（豆瓣API）`);
+          }
+        } catch (e) {
+          console.warn('豆瓣API搜索失败:', e);
+        }
+      }
 
-        // 保存到缓存（2小时）
-        await ClientCache.set(cacheKey, works, 2 * 60 * 60);
-
-        setCelebrityWorks(works);
-        console.log(`找到 ${works.length} 部 ${celebrityName} 的作品（豆瓣，已缓存）`);
-      } else {
-        // 豆瓣没有结果，尝试TMDB fallback
-        console.log('豆瓣未找到相关作品，尝试TMDB...');
+      // 3. TMDB（最后 fallback）
+      if (works.length === 0) {
+        console.log('豆瓣无结果，尝试TMDB...');
         try {
           const tmdbResponse = await fetch(`/api/tmdb/actor?actor=${encodeURIComponent(celebrityName)}&type=movie&limit=20`);
           const tmdbResult = await tmdbResponse.json();
-
           if (tmdbResult.code === 200 && tmdbResult.list && tmdbResult.list.length > 0) {
-            // 给TMDB作品添加source标记
-            const worksWithSource = tmdbResult.list.map((work: any) => ({
+            works = tmdbResult.list.map((work: any) => ({
               ...work,
               source: 'tmdb'
             }));
-            // 保存到缓存（2小时）
-            await ClientCache.set(cacheKey, worksWithSource, 2 * 60 * 60);
-            setCelebrityWorks(worksWithSource);
-            console.log(`找到 ${tmdbResult.list.length} 部 ${celebrityName} 的作品（TMDB，已缓存）`);
-          } else {
-            console.log('TMDB也未找到相关作品');
-            setCelebrityWorks([]);
+            source = 'tmdb';
+            console.log(`找到 ${works.length} 部 ${celebrityName} 的作品（TMDB）`);
           }
-        } catch (tmdbError) {
-          console.error('TMDB搜索失败:', tmdbError);
-          setCelebrityWorks([]);
+        } catch (e) {
+          console.warn('TMDB搜索失败:', e);
         }
+      }
+
+      if (works.length > 0) {
+        await ClientCache.set(cacheKey, works, 2 * 60 * 60);
+        setCelebrityWorks(works);
+        console.log(`演员作品已缓存: ${celebrityName} (${source})`);
+      } else {
+        console.log('所有源均未找到相关作品');
+        setCelebrityWorks([]);
       }
     } catch (error) {
       console.error('获取演员作品出错:', error);
@@ -5395,6 +5445,7 @@ function PlayPageClient() {
         loading={danmuLoading}
         loadMeta={danmuLoadMeta}
         error={danmuError}
+        playerContainer={artPlayerRef.current?.template?.$player || artRef.current}
         onReload={async () => {
           // 重新加载外部弹幕（强制刷新）
           const result = await loadExternalDanmu({ force: true });
