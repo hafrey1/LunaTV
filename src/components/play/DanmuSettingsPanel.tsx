@@ -236,6 +236,11 @@ export const DanmuSettingsPanel = memo(function DanmuSettingsPanel({
         isVisible ? 'opacity-100 scale-100 translate-y-0' : 'opacity-0 scale-95 translate-y-2'
       }`}
       style={{
+        // 🔧 重置 ArtPlayer 继承的样式
+        fontSize: 'initial',
+        lineHeight: 'initial',
+        textShadow: 'none',
+        fontFamily: 'inherit',
         // 🎨 多层深度阴影（Apple风格）
         boxShadow: `
           0 2px 8px rgba(0, 0, 0, 0.1),
